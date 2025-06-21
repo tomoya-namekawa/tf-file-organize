@@ -7,11 +7,7 @@ import (
 	"strings"
 
 	"github.com/spf13/cobra"
-	"github.com/tomoya-namekawa/terraform-file-organize/internal/config"
-	"github.com/tomoya-namekawa/terraform-file-organize/internal/parser"
-	"github.com/tomoya-namekawa/terraform-file-organize/internal/splitter"
-	"github.com/tomoya-namekawa/terraform-file-organize/internal/writer"
-	"github.com/tomoya-namekawa/terraform-file-organize/pkg/types"
+	"github.com/tomoya-namekawa/terraform-file-organize/internal/usecase"
 )
 
 var (
@@ -165,134 +161,22 @@ func run() error {
 	if err := validateConfigPath(configFile); err != nil {
 		return err
 	}
-	
-	stat, err := os.Stat(inputFile)
+
+	// Create usecase request
+	req := &usecase.OrganizeFilesRequest{
+		InputPath:  inputFile,
+		OutputDir:  outputDir,
+		ConfigFile: configFile,
+		DryRun:     dryRun,
+	}
+
+	// Execute usecase
+	uc := usecase.NewOrganizeFilesUsecase()
+	_, err := uc.Execute(req)
 	if err != nil {
-		return fmt.Errorf("failed to access input path: %w", err)
-	}
-
-	// 出力ディレクトリのデフォルト設定
-	if outputDir == "" {
-		if stat.IsDir() {
-			outputDir = inputFile
-		} else {
-			outputDir = filepath.Dir(inputFile)
-		}
-	}
-
-	var cfg *config.Config
-	
-	// デフォルト設定ファイルを探す
-	if configFile == "" {
-		defaultConfigs := []string{
-			"terraform-file-organize.yaml",
-			"terraform-file-organize.yml",
-			".terraform-file-organize.yaml",
-			".terraform-file-organize.yml",
-		}
-		
-		for _, defaultConfig := range defaultConfigs {
-			// セキュリティ検証を追加
-			if err := validateConfigPath(defaultConfig); err == nil {
-				configFile = defaultConfig
-				break
-			}
-		}
-	}
-	
-	if configFile != "" {
-		fmt.Printf("Loading configuration from: %s\n", configFile)
-		cfg, err = config.LoadConfig(configFile)
-		if err != nil {
-			return fmt.Errorf("failed to load config: %w", err)
-		}
-	} else {
-		cfg = &config.Config{}
-	}
-
-	var allBlocks []*types.Block
-	var fileCount int
-
-	if stat.IsDir() {
-		fmt.Printf("Scanning directory for Terraform files: %s\n", inputFile)
-		allBlocks, fileCount, err = parseDirectory(inputFile)
-		if err != nil {
-			return fmt.Errorf("failed to parse directory: %w", err)
-		}
-		fmt.Printf("Found %d .tf files with %d total blocks\n", fileCount, len(allBlocks))
-	} else {
-		fmt.Printf("Parsing Terraform file: %s\n", inputFile)
-		p := parser.New()
-		parsedFile, err := p.ParseFile(inputFile)
-		if err != nil {
-			return fmt.Errorf("failed to parse file: %w", err)
-		}
-		allBlocks = parsedFile.Blocks
-		fileCount = 1
-		fmt.Printf("Found %d blocks\n", len(allBlocks))
-	}
-
-	if len(allBlocks) == 0 {
-		fmt.Println("No Terraform blocks found to organize")
-		return nil
-	}
-
-	combinedFile := &types.ParsedFile{Blocks: allBlocks}
-	s := splitter.NewWithConfig(cfg)
-	groups := s.GroupBlocks(combinedFile)
-	
-	fmt.Printf("Organized into %d file groups\n", len(groups))
-
-	w := writer.New(outputDir, dryRun)
-	if err := w.WriteGroups(groups); err != nil {
-		return fmt.Errorf("failed to write files: %w", err)
-	}
-
-	if dryRun {
-		fmt.Println("Dry run completed. Use --dry-run=false to actually create files.")
-	} else {
-		fmt.Printf("Successfully organized Terraform files into: %s\n", outputDir)
+		return err
 	}
 
 	return nil
 }
 
-func parseDirectory(dirPath string) ([]*types.Block, int, error) {
-	var allBlocks []*types.Block
-	fileCount := 0
-	
-	err := filepath.Walk(dirPath, func(path string, info os.FileInfo, err error) error {
-		if err != nil {
-			return err
-		}
-		
-		// セキュリティチェック: シンボリックリンクをスキップ
-		if info.Mode()&os.ModeSymlink != 0 {
-			fmt.Printf("Warning: skipping symbolic link: %s\n", path)
-			return nil
-		}
-		
-		if !info.IsDir() && strings.HasSuffix(path, ".tf") {
-			// 各ファイルパスも検証
-			if err := validatePath(path); err != nil {
-				fmt.Printf("Warning: skipping unsafe path %s: %v\n", path, err)
-				return nil
-			}
-			
-			p := parser.New()
-			parsedFile, parseErr := p.ParseFile(path)
-			if parseErr != nil {
-				fmt.Printf("Warning: failed to parse %s: %v\n", path, parseErr)
-				return nil
-			}
-			
-			allBlocks = append(allBlocks, parsedFile.Blocks...)
-			fileCount++
-			fmt.Printf("  Processed: %s (%d blocks)\n", path, len(parsedFile.Blocks))
-		}
-		
-		return nil
-	})
-	
-	return allBlocks, fileCount, err
-}

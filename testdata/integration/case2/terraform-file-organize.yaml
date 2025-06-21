@@ -1,0 +1,4 @@
+# case2: デフォルト設定でのテスト（case1と同じ設定）
+groups: []
+overrides: {}
+exclude: []

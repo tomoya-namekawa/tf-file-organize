@@ -2,6 +2,8 @@ package splitter
 
 import (
 	"fmt"
+	"path/filepath"
+	"sort"
 	"strings"
 
 	"github.com/tomoya-namekawa/terraform-file-organize/internal/config"
@@ -44,8 +46,15 @@ func (s *Splitter) GroupBlocks(parsedFile *types.ParsedFile) []*types.BlockGroup
 	
 	result := make([]*types.BlockGroup, 0, len(groups))
 	for _, group := range groups {
+		// グループ内のブロックをアルファベット順でソート
+		s.sortBlocksInGroup(group)
 		result = append(result, group)
 	}
+	
+	// グループ自体もファイル名でソート
+	sort.Slice(result, func(i, j int) bool {
+		return result[i].FileName < result[j].FileName
+	})
 	
 	return result
 }
@@ -167,10 +176,14 @@ func (s *Splitter) sanitizeFileName(name string) string {
 		return "unnamed"
 	}
 	
-	// まず危険な文字を置換
+	// filepath.Cleanを使用してパストラバーサルを防ぐ
+	cleaned := filepath.Clean(name)
+	
+	// filepath.Baseを使用してディレクトリ区切り文字を除去
+	cleaned = filepath.Base(cleaned)
+	
+	// 残りの危険な文字を置換
 	replacer := strings.NewReplacer(
-		"/", "_",
-		"\\", "_",
 		":", "_",
 		"*", "_",
 		"?", "_",
@@ -179,14 +192,13 @@ func (s *Splitter) sanitizeFileName(name string) string {
 		">", "_",
 		"|", "_",
 		" ", "_",
-		"..", "_", // パストラバーサル対策
 		"\x00", "_", // ヌル文字
 	)
-	sanitized := replacer.Replace(name)
+	cleaned = replacer.Replace(cleaned)
 	
 	// 制御文字を除去
 	var result strings.Builder
-	for _, r := range sanitized {
+	for _, r := range cleaned {
 		if r >= 32 && r <= 126 { // 印刷可能ASCII文字のみ
 			result.WriteRune(r)
 		} else {
@@ -194,7 +206,7 @@ func (s *Splitter) sanitizeFileName(name string) string {
 		}
 	}
 	
-	cleaned := result.String()
+	cleaned = result.String()
 	
 	// 連続するアンダースコアを単一に
 	for strings.Contains(cleaned, "__") {
@@ -231,4 +243,21 @@ func (s *Splitter) sanitizeFileName(name string) string {
 	}
 	
 	return cleaned
+}
+
+// sortBlocksInGroup はグループ内のブロックをアルファベット順でソート
+func (s *Splitter) sortBlocksInGroup(group *types.BlockGroup) {
+	sort.Slice(group.Blocks, func(i, j int) bool {
+		return s.getBlockSortKey(group.Blocks[i]) < s.getBlockSortKey(group.Blocks[j])
+	})
+}
+
+// getBlockSortKey はブロックのソートキーを生成
+func (s *Splitter) getBlockSortKey(block *types.Block) string {
+	// ブロックタイプ + ラベルでソートキーを作成
+	key := block.Type
+	for _, label := range block.Labels {
+		key += "_" + label
+	}
+	return key
 }

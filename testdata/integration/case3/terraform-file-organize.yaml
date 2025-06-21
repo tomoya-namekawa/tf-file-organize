@@ -1,0 +1,19 @@
+groups:
+  - name: "infrastructure"
+    filename: "infrastructure.tf"
+    patterns:
+      - "aws_vpc"
+      - "aws_subnet*"
+      - "aws_security_group*"
+  - name: "compute"
+    filename: "compute.tf"
+    patterns:
+      - "aws_instance"
+      - "aws_launch_*"
+
+overrides:
+  variable: "vars.tf"
+  locals: "common.tf"
+
+exclude:
+  - "aws_instance_special*"

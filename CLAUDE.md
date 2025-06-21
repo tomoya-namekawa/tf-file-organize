@@ -19,7 +19,22 @@ go build -o terraform-file-organize
 
 # Development commands
 go mod tidy
+
+# Run all tests
 go test ./...
+
+# Run specific test packages
+go test ./internal/config
+go test ./internal/parser
+go test ./internal/splitter  
+go test ./internal/writer
+
+# Run integration tests
+go test -v ./integration_test.go
+go test -v ./integration_golden_test.go
+
+# Run single test
+go test -run TestGroupBlocks ./internal/splitter
 ```
 
 ## Architecture
@@ -38,7 +53,7 @@ The codebase follows a layered architecture with clear separation of concerns:
    - Resource exclusion patterns
    - Filename overrides for block types
 
-4. **Writer** (`internal/writer/file.go`): Converts grouped blocks back to HCL format using `hclwrite`. Uses PartialContent with comprehensive attribute schemas to handle complex Terraform constructs.
+4. **Writer** (`internal/writer/file.go`): Converts grouped blocks back to HCL format using `hclwrite`. Features sophisticated attribute handling with `hclsyntax.Body` parsing and comprehensive fallback mechanisms for complex Terraform expressions.
 
 5. **Types** (`pkg/types/terraform.go`): Defines core data structures including Block, ParsedFile, and BlockGroup.
 
@@ -77,9 +92,29 @@ Configuration supports:
 
 **HCL Complexity Handling**: The writer uses a comprehensive attribute schema to handle various Terraform constructs, with fallback parsing for unknown attributes.
 
-### Testing
+### Testing Strategy
 
-- `testdata/terraform/sample.tf`: Basic Terraform constructs
-- `testdata/terraform/extended-sample.tf`: Complex multi-resource example
-- `testdata/configs/terraform-file-organize.yaml`: Sample configuration with AWS resource grouping
-- All test outputs go to `tmp/` directory (gitignored)
+The project implements comprehensive testing with multiple approaches:
+
+**Unit Tests**: All packages in `internal/` have corresponding `*_test.go` files using separate test packages (e.g., `config_test`, `parser_test`) for proper isolation.
+
+**Integration Tests**: 
+- `integration_test.go`: Binary-based CLI testing that avoids global variable issues
+- `integration_golden_test.go`: Golden file testing that compares actual output against expected output files
+
+**Test Data Structure**:
+- `testdata/terraform/`: Sample Terraform files for basic testing
+- `testdata/integration/case*/`: Golden file test cases with input/expected output pairs
+- `testdata/configs/`: Configuration file examples
+- `tmp/`: All test outputs (gitignored)
+
+**Golden File Testing**: Uses `testdata/integration/` structure where each case has `input/` and `expected/` directories. Tests verify exact file content matches to prevent regression issues.
+
+**Key Testing Commands**:
+```bash
+# Run golden file tests to check for regressions
+go test -v ./integration_golden_test.go
+
+# Test specific functionality
+go test -run TestWildcardMatching ./internal/config
+```
