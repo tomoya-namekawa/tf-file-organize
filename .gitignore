@@ -30,3 +30,39 @@ go.work.sum
 # Editor/IDE
 # .idea/
 # .vscode/
+
+
+# Temporary files and test outputs
+tmp/*
+!tmp/.gitkeep
+
+# build artifacts
+terraform-file-organize
+terraform-file-organize-test
+
+# Terraform関連ファイル（機密情報保護）
+*.tfstate
+*.tfstate.*
+*.tfvars
+*.tfvars.json
+.terraform/
+.terraform.lock.hcl
+
+# 機密情報ファイル
+*.pem
+*.key
+*.p12
+*.pfx
+secrets/
+config/local.yaml
+config/production.yaml
+
+# IDEファイル
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS生成ファイル
+.DS_Store
+Thumbs.db

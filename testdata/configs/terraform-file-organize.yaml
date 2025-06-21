@@ -1,0 +1,49 @@
+# terraform-file-organize 設定ファイル
+# リソースタイプのマッチングパターンとファイル名を定義
+
+# グループ設定
+groups:
+  # AWSネットワーク関連をまとめる
+  - name: "network"
+    filename: "network.tf"
+    patterns:
+      - "aws_vpc"
+      - "aws_subnet"
+      - "aws_internet_gateway"
+      - "aws_route_table*"
+      - "aws_nat_gateway"
+      - "aws_security_group*"
+
+  # AWSコンピュート関連をまとめる
+  - name: "compute"
+    filename: "compute.tf"
+    patterns:
+      - "aws_instance"
+      - "aws_launch_*"
+      - "aws_autoscaling_*"
+      - "aws_elb*"
+      - "aws_lb*"
+
+  # AWS RDS関連をまとめる
+  - name: "database"
+    filename: "database.tf"
+    patterns:
+      - "aws_db_*"
+      - "aws_rds_*"
+
+  # S3関連をまとめる
+  - name: "storage"
+    filename: "storage.tf"
+    patterns:
+      - "aws_s3_*"
+
+# デフォルトの命名規則を上書きする場合
+overrides:
+  # 特定のブロックタイプのファイル名を変更
+  variable: "vars.tf"
+  output: "outputs.tf"
+  locals: "common.tf"
+
+# 除外パターン（これらにマッチするリソースは個別ファイルのまま）
+exclude:
+  - "aws_instance_special*"
