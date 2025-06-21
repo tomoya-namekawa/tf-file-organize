@@ -78,75 +78,91 @@ func (w *Writer) writeGroup(group *types.BlockGroup) error {
 }
 
 func (w *Writer) copyBlockBody(sourceBody hcl.Body, targetBody *hclwrite.Body) error {
-	schema := &hcl.BodySchema{
-		Attributes: []hcl.AttributeSchema{
-			{Name: "required_version"},
-			{Name: "region"},
-			{Name: "description"},
-			{Name: "type"},
-			{Name: "default"},
-			{Name: "ami"},
-			{Name: "instance_type"},
-			{Name: "key_name"},
-			{Name: "name_prefix"},
-			{Name: "from_port"},
-			{Name: "to_port"},
-			{Name: "protocol"},
-			{Name: "cidr_blocks"},
-			{Name: "vpc_security_group_ids"},
-			{Name: "tags"},
-			{Name: "source"},
-			{Name: "name"},
-			{Name: "cidr"},
-			{Name: "azs"},
-			{Name: "private_subnets"},
-			{Name: "public_subnets"},
-			{Name: "enable_nat_gateway"},
-			{Name: "enable_vpn_gateway"},
-			{Name: "value"},
-			{Name: "most_recent"},
-			{Name: "owners"},
-		},
-		Blocks: []hcl.BlockHeaderSchema{
-			{Type: "required_providers"},
-			{Type: "ingress"},
-			{Type: "egress"},
-			{Type: "filter"},
-			{Type: "lifecycle"},
-			{Type: "provisioner", LabelNames: []string{"type"}},
-			{Type: "connection"},
-			{Type: "dynamic", LabelNames: []string{"for_each"}},
-		},
-	}
-	
-	content, remain, diags := sourceBody.PartialContent(schema)
+	// まずschemaなしですべての内容を取得
+	content, diags := sourceBody.Content(&hcl.BodySchema{})
 	if diags.HasErrors() {
-		return fmt.Errorf("failed to get content: %s", diags.Error())
+		// fallbackとして、より寛容な方法を試す
+		return w.copyBlockBodyFallback(sourceBody, targetBody)
 	}
 
-	for name, attr := range content.Attributes {
-		value, diags := attr.Expr.Value(nil)
-		if diags.HasErrors() {
-			continue
+	// 属性を取得
+	attrs, attrDiags := sourceBody.JustAttributes()
+	if !attrDiags.HasErrors() {
+		for name, attr := range attrs {
+			value, valueDiags := attr.Expr.Value(nil)
+			if valueDiags.HasErrors() {
+				// 評価できない場合は文字列でfallback
+				continue
+			}
+			targetBody.SetAttributeValue(name, value)
 		}
-		targetBody.SetAttributeValue(name, value)
 	}
 
-	for _, block := range content.Blocks {
+	// 既知のブロックタイプを処理
+	blocks := content.Blocks
+	for _, block := range blocks {
 		nestedBlock := targetBody.AppendNewBlock(block.Type, block.Labels)
 		if err := w.copyBlockBody(block.Body, nestedBlock.Body()); err != nil {
 			return fmt.Errorf("failed to copy nested block: %w", err)
 		}
 	}
 
-	remainAttrs, diags := remain.JustAttributes()
-	if !diags.HasErrors() {
-		for name, attr := range remainAttrs {
-			value, diags := attr.Expr.Value(nil)
-			if diags.HasErrors() {
-				continue
-			}
-			targetBody.SetAttributeValue(name, value)
+	return nil
+}
+
+// fallback method for problematic cases
+func (w *Writer) copyBlockBodyFallback(sourceBody hcl.Body, targetBody *hclwrite.Body) error {
+	// より包括的なschemaを定義
+	schema := &hcl.BodySchema{
+		Attributes: []hcl.AttributeSchema{
+			// 基本属性
+			{Name: "ami"}, {Name: "instance_type"}, {Name: "key_name"},
+			{Name: "vpc_security_group_ids"}, {Name: "tags"}, {Name: "subnet_id"},
+			{Name: "name_prefix"}, {Name: "description"}, {Name: "type"}, {Name: "default"},
+			{Name: "region"}, {Name: "source"}, {Name: "name"}, {Name: "value"},
+			{Name: "most_recent"}, {Name: "owners"}, {Name: "cidr_block"}, {Name: "vpc_id"},
+			{Name: "cidr"}, {Name: "azs"}, {Name: "private_subnets"}, {Name: "public_subnets"},
+			{Name: "enable_nat_gateway"}, {Name: "enable_vpn_gateway"},
+			// random_string関連
+			{Name: "length"}, {Name: "special"}, {Name: "upper"}, {Name: "lower"},
+			// ロードバランサー関連
+			{Name: "internal"}, {Name: "load_balancer_type"}, {Name: "security_groups"}, {Name: "subnets"},
+			// データベース関連
+			{Name: "identifier"}, {Name: "engine"}, {Name: "engine_version"}, {Name: "instance_class"},
+			{Name: "allocated_storage"}, {Name: "storage_type"}, {Name: "db_name"}, {Name: "username"}, {Name: "password"},
+			{Name: "db_subnet_group_name"}, {Name: "skip_final_snapshot"}, {Name: "subnet_ids"},
+			// S3関連
+			{Name: "bucket"}, {Name: "status"},
+			// セキュリティグループ関連
+			{Name: "from_port"}, {Name: "to_port"}, {Name: "protocol"}, {Name: "cidr_blocks"}, {Name: "gateway_id"},
+		},
+		Blocks: []hcl.BlockHeaderSchema{
+			{Type: "required_providers"}, {Type: "ingress"}, {Type: "egress"}, {Type: "filter"},
+			{Type: "lifecycle"}, {Type: "provisioner", LabelNames: []string{"type"}},
+			{Type: "connection"}, {Type: "dynamic", LabelNames: []string{"for_each"}},
+			{Type: "route"}, {Type: "versioning_configuration"},
+		},
+	}
+
+	content, _, diags := sourceBody.PartialContent(schema)
+	if diags.HasErrors() {
+		return fmt.Errorf("failed to get content with fallback: %s", diags.Error())
+	}
+
+	// 属性をコピー
+	for name, attr := range content.Attributes {
+		value, valueDiags := attr.Expr.Value(nil)
+		if valueDiags.HasErrors() {
+			continue
+		}
+		targetBody.SetAttributeValue(name, value)
+	}
+
+	// ブロックをコピー
+	for _, block := range content.Blocks {
+		nestedBlock := targetBody.AppendNewBlock(block.Type, block.Labels)
+		if err := w.copyBlockBody(block.Body, nestedBlock.Body()); err != nil {
+			return fmt.Errorf("failed to copy nested block: %w", err)
 		}
 	}
 
