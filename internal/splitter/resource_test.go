@@ -3,9 +3,9 @@ package splitter_test
 import (
 	"testing"
 
-	"github.com/namekawa/terraform-file-organize/internal/config"
-	"github.com/namekawa/terraform-file-organize/internal/splitter"
-	"github.com/namekawa/terraform-file-organize/pkg/types"
+	"github.com/tomoya-namekawa/terraform-file-organize/internal/config"
+	"github.com/tomoya-namekawa/terraform-file-organize/internal/splitter"
+	"github.com/tomoya-namekawa/terraform-file-organize/pkg/types"
 )
 
 func createTestBlock(blockType string, labels []string) *types.Block {

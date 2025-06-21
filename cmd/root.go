@@ -7,11 +7,11 @@ import (
 	"strings"
 
 	"github.com/spf13/cobra"
-	"github.com/namekawa/terraform-file-organize/internal/config"
-	"github.com/namekawa/terraform-file-organize/internal/parser"
-	"github.com/namekawa/terraform-file-organize/internal/splitter"
-	"github.com/namekawa/terraform-file-organize/internal/writer"
-	"github.com/namekawa/terraform-file-organize/pkg/types"
+	"github.com/tomoya-namekawa/terraform-file-organize/internal/config"
+	"github.com/tomoya-namekawa/terraform-file-organize/internal/parser"
+	"github.com/tomoya-namekawa/terraform-file-organize/internal/splitter"
+	"github.com/tomoya-namekawa/terraform-file-organize/internal/writer"
+	"github.com/tomoya-namekawa/terraform-file-organize/pkg/types"
 )
 
 var (

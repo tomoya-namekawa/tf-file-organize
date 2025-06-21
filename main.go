@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/namekawa/terraform-file-organize/cmd"
+	"github.com/tomoya-namekawa/terraform-file-organize/cmd"
 )
 
 func main() {

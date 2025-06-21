@@ -7,7 +7,7 @@ import (
 
 	"github.com/hashicorp/hcl/v2"
 	"github.com/hashicorp/hcl/v2/hclwrite"
-	"github.com/namekawa/terraform-file-organize/pkg/types"
+	"github.com/tomoya-namekawa/terraform-file-organize/pkg/types"
 )
 
 type Writer struct {
