@@ -15,19 +15,22 @@ Terraformファイルをリソースタイプごとに分割・整理するGoの
 - 🎯 **直感的な命名規則**: 分かりやすいファイル命名パターン
 - 👀 **ドライランモード**: 実際のファイル作成前にプレビュー可能
 - ⚡ **高速処理**: HashiCorp公式のHCLパーサーを使用
+- 🔒 **安定した出力**: 決定的な出力でCI/CDやバージョン管理に最適
+- 🛡️ **セキュリティ対策**: パストラバーサル攻撃対策など包括的なセキュリティ機能
+- ✅ **包括的テスト**: ゴールデンファイルテストによる回帰防止
 
 ## インストール
 
 ### go installを使用
 
 ```bash
-go install github.com/namekawa/terraform-file-organize@latest
+go install github.com/tomoya-namekawa/terraform-file-organize@latest
 ```
 
 ### ソースからビルド
 
 ```bash
-git clone https://github.com/namekawa/terraform-file-organize.git
+git clone https://github.com/tomoya-namekawa/terraform-file-organize.git
 cd terraform-file-organize
 go build -o terraform-file-organize
 ```
@@ -190,6 +193,12 @@ go mod tidy
 # ビルド
 go build -o terraform-file-organize
 
+# 全テストの実行
+go test ./...
+
+# ゴールデンファイルテスト（重要）
+go test -run TestGoldenFiles -v
+
 # テスト実行（単一ファイル）
 ./terraform-file-organize testdata/terraform/sample.tf --dry-run
 
@@ -237,6 +246,38 @@ terraform-file-organize .
 
 このプロジェクトは MIT ライセンスの下で公開されています。
 
+## 技術仕様
+
+### アーキテクチャ
+
+本ツールはクリーンアーキテクチャの原則に従って設計されており、以下のレイヤーで構成されています：
+
+- **CLI層** (`cmd/`): コマンドライン引数の解析
+- **ユースケース層** (`internal/usecase/`): ビジネスロジックの調整とセキュリティ検証
+- **ドメイン層** (`internal/`): コア機能（パーサー、スプリッター、ライター、設定）
+- **データ層** (`pkg/types/`): データ構造の定義
+
+### 安定した出力の保証
+
+CI/CDやバージョン管理との互換性を確保するため、以下の仕組みで決定的な出力を実現：
+
+- **リソースの並び順**: グループ内でアルファベット順にソート
+- **属性の並び順**: HCL属性をアルファベット順にソート
+- **ファイル名の並び順**: 出力ファイル名をアルファベット順にソート
+- **フォーマット**: `hclwrite.Format`による一貫したフォーマット
+
+### セキュリティ機能
+
+- **パストラバーサル対策**: `filepath.Clean`と`filepath.Base`による安全なパス処理
+- **入力検証**: 不正なファイルパスや設定値の検証
+- **シンボリックリンク対策**: 危険なシンボリックリンクのスキップ
+
 ## 貢献
 
 プルリクエストやイシューの報告を歓迎します。バグ報告や機能要求は GitHub Issues をご利用ください。
+
+### 開発時の注意点
+
+- 全ての変更はゴールデンファイルテストで検証してください
+- 出力形式を変更する場合は期待値ファイルの更新が必要です
+- セキュリティに関わる変更は特に慎重にテストしてください

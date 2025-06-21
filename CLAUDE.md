@@ -28,6 +28,7 @@ go test ./internal/config
 go test ./internal/parser
 go test ./internal/splitter  
 go test ./internal/writer
+go test ./internal/usecase
 
 # Run integration tests
 go test -v ./integration_test.go
@@ -35,31 +36,33 @@ go test -v ./integration_golden_test.go
 
 # Run single test
 go test -run TestGroupBlocks ./internal/splitter
+
+# Run golden file tests (critical for regression detection)
+go test -run TestGoldenFiles -v
 ```
 
 ## Architecture
 
-The codebase follows a layered architecture with clear separation of concerns:
+The codebase follows clean architecture principles with strict layered separation:
 
 ### Core Components
 
-1. **Parser** (`internal/parser/terraform.go`): Uses `github.com/hashicorp/hcl/v2` to parse Terraform files into structured data. Extracts all Terraform block types using HCL's BodySchema. Supports both single files and recursive directory parsing.
+1. **Usecase Layer** (`internal/usecase/organize.go`): Business logic orchestrator that coordinates all operations. Implements security validation, configuration loading, and error handling. This layer isolates business rules from CLI concerns and provides a clean interface for testing.
 
-2. **Config** (`internal/config/config.go`): Manages YAML configuration files for custom grouping rules. Supports wildcard pattern matching, resource exclusion, and filename overrides. Automatically searches for default config files.
+2. **Parser** (`internal/parser/terraform.go`): Uses `github.com/hashicorp/hcl/v2` to parse Terraform files into structured data. Extracts all Terraform block types using HCL's BodySchema. Supports both single files and recursive directory parsing.
 
-3. **Splitter** (`internal/splitter/resource.go`): Groups parsed blocks by type and subtype, implementing both default and configuration-driven file naming logic. Supports:
-   - Default grouping by resource type
-   - Custom grouping via configuration patterns
-   - Resource exclusion patterns
-   - Filename overrides for block types
+3. **Config** (`internal/config/config.go`): Manages YAML configuration files for custom grouping rules. Supports wildcard pattern matching, resource exclusion, and filename overrides. Automatically searches for default config files.
 
-4. **Writer** (`internal/writer/file.go`): Converts grouped blocks back to HCL format using `hclwrite`. Features sophisticated attribute handling with `hclsyntax.Body` parsing and comprehensive fallback mechanisms for complex Terraform expressions.
+4. **Splitter** (`internal/splitter/resource.go`): Groups parsed blocks by type and subtype, implementing both default and configuration-driven file naming logic. **Critical**: Implements deterministic sorting for stable output - resources are sorted alphabetically within groups and groups are sorted by filename.
 
-5. **Types** (`pkg/types/terraform.go`): Defines core data structures including Block, ParsedFile, and BlockGroup.
+5. **Writer** (`internal/writer/file.go`): Converts grouped blocks back to HCL format using `hclwrite`. **Key feature**: Implements deterministic attribute ordering by sorting attributes alphabetically before writing. Uses `hclwrite.Format` for consistent formatting without external terraform CLI dependency.
+
+6. **Types** (`pkg/types/terraform.go`): Defines core data structures including Block, ParsedFile, and BlockGroup.
 
 ### CLI Interface
 
-Built with Cobra framework (`cmd/root.go`), supporting:
+Built with Cobra framework (`cmd/root.go`). **Important**: The CLI layer has been refactored to be thin - it only handles argument parsing and delegates all business logic to the usecase layer. This enables better testing and separation of concerns.
+
 - Positional argument: Input path (file or directory, required)
 - `--output-dir/-o`: Output directory (default: same as input path)
 - `--config/-c`: Configuration file path (optional, auto-detects default files)
@@ -78,43 +81,73 @@ Configuration supports:
 - **Overrides**: Custom filenames for block types (e.g., `variable` → `vars.tf`)
 - **Exclude**: Patterns to keep as individual files
 
-### Default Output Behavior
-
-- Single file input: Output to same directory as input file
-- Directory input: Output to input directory
-- `--output-dir` specified: Override default behavior
-
 ### Key Implementation Details
 
-**Directory Processing**: Uses `filepath.Walk` to recursively find `.tf` files, combining all blocks before splitting.
+**Deterministic Output**: Critical for CI/CD and version control. Both resource ordering (via `sortBlocksInGroup`) and attribute ordering (via alphabetical sorting in `copyBlockBodyGeneric`) are deterministic.
 
-**Wildcard Matching**: Simple pattern matching supporting prefix (`aws_s3_*`), suffix (`*_bucket`), and contains patterns.
+**Security Measures**: Path traversal protection implemented in the usecase layer with comprehensive validation. File paths are sanitized using `filepath.Clean` and `filepath.Base`.
 
-**HCL Complexity Handling**: The writer uses a comprehensive attribute schema to handle various Terraform constructs, with fallback parsing for unknown attributes.
+**HCL Processing**: The writer handles complex Terraform expressions through multiple fallback mechanisms. Uses `hclsyntax.Body` for direct access to parsed syntax trees when standard evaluation fails.
+
+**Testing Architecture**: Uses separate test packages (e.g., `config_test`) to avoid import cycles and ensure proper isolation. Golden file tests in `testdata/integration/` provide regression protection.
 
 ### Testing Strategy
 
 The project implements comprehensive testing with multiple approaches:
 
-**Unit Tests**: All packages in `internal/` have corresponding `*_test.go` files using separate test packages (e.g., `config_test`, `parser_test`) for proper isolation.
+**Unit Tests**: All packages in `internal/` have corresponding `*_test.go` files using separate test packages (e.g., `config_test`, `parser_test`, `usecase_test`) for proper isolation and to avoid import cycles.
 
 **Integration Tests**: 
 - `integration_test.go`: Binary-based CLI testing that avoids global variable issues
-- `integration_golden_test.go`: Golden file testing that compares actual output against expected output files
+- `integration_golden_test.go`: **Critical** - Golden file testing that compares actual output against expected output files. These tests ensure deterministic output and catch regressions.
 
 **Test Data Structure**:
 - `testdata/terraform/`: Sample Terraform files for basic testing
 - `testdata/integration/case*/`: Golden file test cases with input/expected output pairs
+  - `case1/`: Basic Terraform blocks with default configuration
+  - `case2/`: Multiple files with same resource types (basic grouping)  
+  - `case3/`: Custom grouping rules with configuration file
 - `testdata/configs/`: Configuration file examples
 - `tmp/`: All test outputs (gitignored)
 
-**Golden File Testing**: Uses `testdata/integration/` structure where each case has `input/` and `expected/` directories. Tests verify exact file content matches to prevent regression issues.
+**Golden File Testing**: **Must be maintained** - Uses `testdata/integration/` structure where each case has `input/` and `expected/` directories. Tests verify exact file content matches including attribute ordering and formatting. When making changes that affect output, update expected files by running the tool and copying results.
+
+**Test Execution Notes**:
+- Golden file tests are enabled and critical for preventing regressions
+- Tests assume deterministic output (attributes and resources sorted alphabetically)
+- Failed golden file tests indicate either bugs or that expected outputs need updating
 
 **Key Testing Commands**:
 ```bash
-# Run golden file tests to check for regressions
-go test -v ./integration_golden_test.go
+# Run golden file tests to check for regressions (most important)
+go test -run TestGoldenFiles -v
 
 # Test specific functionality
 go test -run TestWildcardMatching ./internal/config
+
+# Test usecase layer (business logic)
+go test ./internal/usecase -v
+
+# Update golden files when output format changes (manual process)
+./terraform-file-organize testdata/integration/case1/input -o testdata/integration/case1/expected
 ```
+
+## Development Principles
+
+**HCL Processing**: Always use https://github.com/hashicorp/hcl for Terraform-related processing. This ensures compatibility and leverages HashiCorp's official parsing capabilities.
+
+**Deterministic Output**: Any change to output generation must maintain deterministic behavior. Sort all collections (resources, attributes, filenames) alphabetically to ensure consistent results across runs.
+
+**Security First**: All file path operations must use `filepath.Clean` and `filepath.Base` to prevent path traversal attacks. Validate all user inputs in the usecase layer.
+
+**Testing Requirements**: 
+- Golden file tests are mandatory for any output changes
+- Use separate test packages to avoid import cycles
+- All new functionality requires corresponding unit tests
+
+## Critical Files for Output Changes
+
+When modifying output behavior, these files are critical:
+- `internal/splitter/resource.go` - Handles resource sorting and grouping
+- `internal/writer/file.go` - Controls attribute ordering and HCL formatting
+- `testdata/integration/case*/expected/` - Golden file test expectations
