@@ -4,12 +4,10 @@ go = "1.24.4"
 
 # Development and CI tools
 golangci-lint = "latest"
-gosec = "latest"
 pinact = "latest"
 
 # GitHub Actions linting tools
 actionlint = "latest"
-zizmor = "latest"
 
 [env]
 # Go environment variables
