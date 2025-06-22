@@ -172,7 +172,6 @@ When modifying output behavior, these files are critical:
 The project uses GitHub Actions for continuous integration with comprehensive testing and security checks:
 
 **CI Pipeline** (`.github/workflows/ci.yml`):
-- **pinact-check**: Verifies all GitHub Actions are pinned to commit hashes for security
 - **test**: Runs comprehensive test suite with race detection and coverage reporting
 - **lint**: Executes golangci-lint via dedicated GitHub Action with multiple linters enabled (includes gosec)
 - **build**: Builds binary and verifies it works with sample inputs
@@ -180,6 +179,7 @@ The project uses GitHub Actions for continuous integration with comprehensive te
 **Workflow Lint Pipeline** (`.github/workflows/workflow-lint.yml`):
 Runs only when GitHub Actions workflows or mise configuration changes:
 - **workflow-lint**: Lints GitHub Actions workflows using actionlint
+- **pinact-check**: Verifies all GitHub Actions are pinned to commit hashes for security
 - Triggered by changes to `.github/**` or `.mise.toml` files
 
 **Linting Configuration** (`.golangci.yml`):
