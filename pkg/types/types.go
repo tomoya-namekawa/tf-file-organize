@@ -12,6 +12,7 @@ type Block struct {
 	TypeRange       hcl.Range // Block type range
 	RawBody         string    // Raw source code within the block (with comments)
 	LeadingComments string    // Comments before the block (file-level comments)
+	SourceFile      string    // Source file path where this block was parsed from
 }
 
 // ParsedFile represents a parsed Terraform file containing a collection of blocks.

@@ -73,6 +73,7 @@ func (p *Parser) ParseFile(filename string) (*types.ParsedFile, error) {
 				TypeRange:       block.TypeRange,
 				RawBody:         "",
 				LeadingComments: "",
+				SourceFile:      filename,
 			}
 			parsedFile.Blocks = append(parsedFile.Blocks, parsedBlock)
 		}
@@ -93,6 +94,7 @@ func (p *Parser) ParseFile(filename string) (*types.ParsedFile, error) {
 				TypeRange:       block.TypeRange,
 				RawBody:         rawBody,
 				LeadingComments: leadingComments,
+				SourceFile:      filename,
 			}
 			parsedFile.Blocks = append(parsedFile.Blocks, parsedBlock)
 		}

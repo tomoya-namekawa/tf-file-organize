@@ -377,35 +377,26 @@ func (uc *OrganizeFilesUsecase) removeSourceFiles(sourceFiles []string) error {
 
 // getFilesToRemove identifies source files that should be removed for idempotency
 func (uc *OrganizeFilesUsecase) getFilesToRemove(sourceFiles []string, groups []*types.BlockGroup, _ *config.Config) []string {
-	generatedFiles := make(map[string]bool)
-	for _, group := range groups {
-		generatedFiles[group.FileName] = true
-	}
-
+	generatedFiles := uc.buildGeneratedFilesMap(groups)
+	sourceToOutputMapping := uc.buildSourceToOutputMapping(groups)
 	var filesToRemove []string
+
 	for _, sourceFile := range sourceFiles {
 		fileName := filepath.Base(sourceFile)
 
-		// Exclude newly generated files for idempotency
-		if generatedFiles[fileName] {
+		if uc.shouldExcludeFile(fileName, generatedFiles) {
 			continue
 		}
 
-		// Exclude tool-generated files
-		if strings.HasPrefix(fileName, "data__") ||
-			strings.HasPrefix(fileName, "resource__") ||
-			strings.HasPrefix(fileName, "module__") {
+		if uc.shouldRemoveReorganizedFile(fileName, sourceFile, sourceToOutputMapping, &filesToRemove) {
 			continue
 		}
 
-		isDefaultGenerated := fileName == localsFile ||
-			fileName == outputsFile ||
-			fileName == providersFile ||
-			fileName == terraformFile ||
-			fileName == variablesFile
+		if uc.shouldExcludeToolGeneratedFile(fileName, sourceFile, filesToRemove) {
+			continue
+		}
 
-		if isDefaultGenerated {
-			// Exclude default generated files
+		if uc.shouldExcludeDefaultGeneratedFile(fileName) {
 			continue
 		}
 
@@ -414,4 +405,70 @@ func (uc *OrganizeFilesUsecase) getFilesToRemove(sourceFiles []string, groups []
 	}
 
 	return filesToRemove
+}
+
+func (uc *OrganizeFilesUsecase) buildGeneratedFilesMap(groups []*types.BlockGroup) map[string]bool {
+	generatedFiles := make(map[string]bool)
+	for _, group := range groups {
+		generatedFiles[group.FileName] = true
+	}
+	return generatedFiles
+}
+
+func (uc *OrganizeFilesUsecase) buildSourceToOutputMapping(groups []*types.BlockGroup) map[string]map[string]bool {
+	sourceToOutputMapping := make(map[string]map[string]bool)
+	for _, group := range groups {
+		for _, block := range group.Blocks {
+			if block.SourceFile != "" {
+				sourceFileName := filepath.Base(block.SourceFile)
+				if sourceToOutputMapping[sourceFileName] == nil {
+					sourceToOutputMapping[sourceFileName] = make(map[string]bool)
+				}
+				sourceToOutputMapping[sourceFileName][group.FileName] = true
+			}
+		}
+	}
+	return sourceToOutputMapping
+}
+
+func (uc *OrganizeFilesUsecase) shouldExcludeFile(fileName string, generatedFiles map[string]bool) bool {
+	return generatedFiles[fileName]
+}
+
+func (uc *OrganizeFilesUsecase) shouldRemoveReorganizedFile(fileName, sourceFile string, sourceToOutputMapping map[string]map[string]bool, filesToRemove *[]string) bool {
+	if outputFiles, exists := sourceToOutputMapping[fileName]; exists {
+		if len(outputFiles) == 1 {
+			for outputFile := range outputFiles {
+				if outputFile != fileName {
+					*filesToRemove = append(*filesToRemove, sourceFile)
+					return true
+				}
+			}
+		}
+	}
+	return false
+}
+
+func (uc *OrganizeFilesUsecase) shouldExcludeToolGeneratedFile(fileName, sourceFile string, filesToRemove []string) bool {
+	if !strings.HasPrefix(fileName, "data__") &&
+		!strings.HasPrefix(fileName, "resource__") &&
+		!strings.HasPrefix(fileName, "module__") {
+		return false
+	}
+
+	// Only exclude if not already marked for removal due to reorganization
+	for _, markedFile := range filesToRemove {
+		if markedFile == sourceFile {
+			return false
+		}
+	}
+	return true
+}
+
+func (uc *OrganizeFilesUsecase) shouldExcludeDefaultGeneratedFile(fileName string) bool {
+	return fileName == localsFile ||
+		fileName == outputsFile ||
+		fileName == providersFile ||
+		fileName == terraformFile ||
+		fileName == variablesFile
 }
