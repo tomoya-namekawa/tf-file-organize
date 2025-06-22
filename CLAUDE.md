@@ -8,7 +8,12 @@ terraform-file-organize is a Go CLI tool that parses Terraform files and splits 
 
 ## Build and Development Commands
 
+This project uses [mise](https://mise.jdx.dev/) for tool management. All development tools are defined in `.mise.toml`.
+
 ```bash
+# Install mise and project tools
+mise install
+
 # Build the project
 go build -o terraform-file-organize
 
@@ -40,7 +45,7 @@ go test -run TestGroupBlocks ./internal/splitter
 # Run golden file tests (critical for regression detection)
 go test -run TestGoldenFiles -v
 
-# Linting (CI uses golangci-lint)
+# Linting (managed via mise)
 golangci-lint run
 
 # Run tests with coverage
@@ -164,6 +169,7 @@ When modifying output behavior, these files are critical:
 The project uses GitHub Actions for continuous integration with comprehensive testing and security checks:
 
 **CI Pipeline** (`.github/workflows/ci.yml`):
+All tools are managed via mise for consistent environments across development and CI:
 - **pinact-check**: Verifies all GitHub Actions are pinned to commit hashes for security
 - **test**: Runs comprehensive test suite with race detection and coverage reporting
 - **lint**: Executes golangci-lint with multiple linters enabled

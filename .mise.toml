@@ -1,0 +1,13 @@
+[tools]
+# Go toolchain
+go = "1.24.4"
+
+# Development and CI tools
+golangci-lint = "latest"
+gosec = "latest"
+pinact = "latest"
+
+[env]
+# Go environment variables
+GOPROXY = "https://proxy.golang.org,direct"
+GOSUMDB = "sum.golang.org"
