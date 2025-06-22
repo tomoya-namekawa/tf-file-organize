@@ -79,5 +79,5 @@ jobs:
     - name: Test binary
       run: |
         ./tf-file-organize --help
-        ./tf-file-organize testdata/terraform/sample.tf --dry-run
+        ./tf-file-organize plan testdata/terraform/sample.tf
 
