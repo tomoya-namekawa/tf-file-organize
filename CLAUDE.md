@@ -45,7 +45,7 @@ go test -run TestGroupBlocks ./internal/splitter
 # Run golden file tests (critical for regression detection)
 go test -run TestGoldenFiles -v
 
-# Linting (managed via mise)
+# Linting (install locally)
 golangci-lint run
 
 # GitHub Actions linting
@@ -172,10 +172,9 @@ When modifying output behavior, these files are critical:
 The project uses GitHub Actions for continuous integration with comprehensive testing and security checks:
 
 **CI Pipeline** (`.github/workflows/ci.yml`):
-All tools are managed via mise for consistent environments across development and CI:
 - **pinact-check**: Verifies all GitHub Actions are pinned to commit hashes for security
 - **test**: Runs comprehensive test suite with race detection and coverage reporting
-- **lint**: Executes golangci-lint with multiple linters enabled (includes gosec)
+- **lint**: Executes golangci-lint via dedicated GitHub Action with multiple linters enabled (includes gosec)
 - **build**: Builds binary and verifies it works with sample inputs
 
 **Workflow Lint Pipeline** (`.github/workflows/workflow-lint.yml`):

@@ -2,8 +2,7 @@
 # Go toolchain
 go = "1.24.4"
 
-# Development and CI tools
-golangci-lint = "latest"
+# Development tools (CI uses dedicated actions)
 pinact = "latest"
 
 # GitHub Actions linting tools
