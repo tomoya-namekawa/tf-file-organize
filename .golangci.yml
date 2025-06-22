@@ -1,0 +1,67 @@
+# golangci-lint configuration for terraform-file-organize
+
+run:
+  timeout: 5m
+  modules-download-mode: readonly
+
+linters:
+  enable:
+    - errcheck      # 戻り値のエラーチェック
+    - gosimple      # シンプルな書き方の提案
+    - govet         # go vetの実行
+    - ineffassign   # 無効な代入の検出
+    - staticcheck   # 静的解析
+    - typecheck     # 型チェック
+    - unused        # 未使用の変数・関数の検出
+    - gosec         # セキュリティの問題検出
+    - gocyclo       # 循環的複雑度チェック
+    - gofmt         # フォーマットチェック
+    - goimports     # インポートの整理チェック
+    - misspell      # スペルミスチェック
+    - unparam       # 未使用パラメータの検出
+    - gocritic      # Go批評
+    - revive        # golintの後継
+    - exportloopref # ループ変数の参照問題
+    - nolintlint    # nolintディレクティブの検証
+
+linters-settings:
+  gocyclo:
+    min-complexity: 15
+  
+  gosec:
+    excludes:
+      - G204  # Audit use of command execution - CLIツールなので必要
+  
+  revive:
+    rules:
+      - name: exported
+        disabled: true  # 全てのexported関数にコメントを要求しない
+      - name: package-comments
+        disabled: true  # パッケージコメントを要求しない
+
+issues:
+  exclude-rules:
+    # テストファイルでは一部のlintを無効化
+    - path: _test\.go
+      linters:
+        - gosec
+        - errcheck
+        - gocyclo
+    
+    # testdataディレクトリは除外
+    - path: testdata/
+      linters:
+        - all
+    
+    # tmpディレクトリは除外
+    - path: tmp/
+      linters:
+        - all
+
+  max-issues-per-linter: 0
+  max-same-issues: 0
+
+output:
+  format: colored-line-number
+  print-issued-lines: true
+  print-linter-name: true
