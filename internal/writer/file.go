@@ -381,11 +381,23 @@ func (w *Writer) copyUnknownBlocks(remaining hcl.Body, targetBody *hclwrite.Body
 		return nil
 	}
 
-	unknownContent, _, _ := remaining.PartialContent(&hcl.BodySchema{})
-	for _, block := range unknownContent.Blocks {
-		nestedBlock := targetBody.AppendNewBlock(block.Type, block.Labels)
-		if err := w.copyBlockBody(block.Body, nestedBlock.Body()); err != nil {
-			return fmt.Errorf("failed to copy nested block: %w", err)
+	// remainingから直接すべてのブロックを取得
+	if syntaxBody, ok := remaining.(*hclsyntax.Body); ok {
+		// syntax bodyから直接ブロックを取得
+		for _, block := range syntaxBody.Blocks {
+			nestedBlock := targetBody.AppendNewBlock(block.Type, block.Labels)
+			if err := w.copyBlockBody(block.Body, nestedBlock.Body()); err != nil {
+				return fmt.Errorf("failed to copy nested block: %w", err)
+			}
+		}
+	} else {
+		// フォールバック: 従来の方法
+		unknownContent, _, _ := remaining.PartialContent(&hcl.BodySchema{})
+		for _, block := range unknownContent.Blocks {
+			nestedBlock := targetBody.AppendNewBlock(block.Type, block.Labels)
+			if err := w.copyBlockBody(block.Body, nestedBlock.Body()); err != nil {
+				return fmt.Errorf("failed to copy nested block: %w", err)
+			}
 		}
 	}
 	return nil

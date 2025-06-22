@@ -34,6 +34,10 @@ func TestGoldenFiles(t *testing.T) {
 			name:        "case4",
 			description: "Complex nested blocks and template expressions",
 		},
+		{
+			name:        "case5",
+			description: "Template expressions with nested blocks (fallback processing test)",
+		},
 	}
 
 	for _, tc := range testCases {

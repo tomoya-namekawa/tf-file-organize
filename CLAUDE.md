@@ -103,7 +103,8 @@ testdata/
 │   ├── case1/          # Basic blocks (default config)
 │   ├── case2/          # Multiple files (basic grouping)
 │   ├── case3/          # Custom grouping rules
-│   └── case4/          # Complex multi-cloud setup (25 blocks)
+│   ├── case4/          # Complex multi-cloud setup (25 blocks)
+│   └── case5/          # Template expressions with nested blocks (fallback test)
 ├── configs/            # Configuration file examples
 └── tmp/               # Test outputs (gitignored)
 ```
@@ -250,6 +251,13 @@ resource "aws_instance" "web" {
 
 ### File Management
 - テスト結果などの一時的なファイルはtmp dirに作って
+
+### Test Case Details
+
+**case5**: Specifically tests the fallback processing when RawBody is unavailable. This case validates:
+- Complex template expressions like `"${var.subdomain}.${var.domain_name}"`
+- Nested block preservation (`metadata`, `spec`) without RawBody
+- Syntax body handling for unknown block types
 
 ### Golden File Test Updates
 When modifying output behavior, golden files must be updated manually:
