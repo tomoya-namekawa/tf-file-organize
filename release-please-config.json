@@ -3,7 +3,8 @@
   "packages": {
     ".": {
       "release-type": "go",
-      "initial-version": "0.1.0",
+      "bump-patch-for-minor-pre-major": true,
+      "bump-minor-pre-major": true,
       "changelog-sections": [
         {"type": "feat", "section": "Features", "hidden": false},
         {"type": "fix", "section": "Bug Fixes", "hidden": false},
