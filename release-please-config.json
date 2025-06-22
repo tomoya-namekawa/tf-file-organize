@@ -1,17 +1,9 @@
 {
   "$schema": "https://raw.githubusercontent.com/googleapis/release-please/main/schemas/config.json",
-  "release-type": "go",
-  "package-name": "terraform-file-organize",
-  "initial-version": "0.1.0",
-  "bootstrap-sha": "8b9f2764c9372d58c8062ab1fbe07ee4f9dd1aab",
   "packages": {
     ".": {
-      "package-name": "terraform-file-organize",
       "release-type": "go",
-      "bump-minor-pre-major": false,
-      "bump-patch-for-minor-pre-major": false,
-      "draft": false,
-      "prerelease": false,
+      "initial-version": "0.1.0",
       "changelog-sections": [
         {"type": "feat", "section": "Features", "hidden": false},
         {"type": "fix", "section": "Bug Fixes", "hidden": false},
