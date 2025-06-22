@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.5.1](https://github.com/tomoya-namekawa/tf-file-organize/compare/v0.5.0...v0.5.1) (2025-06-22)
+
+
+### Bug Fixes
+
+* improve idempotency by fixing file removal logic ([fba9204](https://github.com/tomoya-namekawa/tf-file-organize/commit/fba920425de94310d04133db08f4b5c35589abca))
+* improve RawBody processing for complete idempotency ([5d4c186](https://github.com/tomoya-namekawa/tf-file-organize/commit/5d4c186213d51d12e5653bb3f753cd9240872267))
+* remove unused validatePath function and update test expectations ([96e158f](https://github.com/tomoya-namekawa/tf-file-organize/commit/96e158f3dd0f67fecbdb5ab173612e43cb255ac4))
+* resolve file removal issue when blocks are reorganized by config ([1761e27](https://github.com/tomoya-namekawa/tf-file-organize/commit/1761e276b22413e2926256c6cf2f7da384329ae8))
+* resolve idempotency issue with RawBody processing ([a1e71bd](https://github.com/tomoya-namekawa/tf-file-organize/commit/a1e71bddb61369cdf5818ced33ac091bf78c9096))
+
 ## [0.5.0](https://github.com/tomoya-namekawa/tf-file-organize/compare/v0.4.0...v0.5.0) (2025-06-22)
 
 
