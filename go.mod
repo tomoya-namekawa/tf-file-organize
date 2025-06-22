@@ -1,4 +1,4 @@
-module github.com/tomoya-namekawa/terraform-file-organize
+module github.com/tomoya-namekawa/tf-file-organize
 
 go 1.24.4
 

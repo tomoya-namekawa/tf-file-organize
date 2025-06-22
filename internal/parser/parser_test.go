@@ -5,8 +5,8 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/tomoya-namekawa/terraform-file-organize/internal/parser"
-	"github.com/tomoya-namekawa/terraform-file-organize/pkg/types"
+	"github.com/tomoya-namekawa/tf-file-organize/internal/parser"
+	"github.com/tomoya-namekawa/tf-file-organize/pkg/types"
 )
 
 const (

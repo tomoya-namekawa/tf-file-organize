@@ -14,7 +14,7 @@ func TestIdempotency(t *testing.T) {
 	testDir := createTestDir(t, "idempotency")
 
 	// バイナリをビルド
-	binary := filepath.Join(testDir, "terraform-file-organize")
+	binary := filepath.Join(testDir, "tf-file-organize")
 	cmd := exec.Command("go", "build", "-o", binary)
 	err := cmd.Run()
 	if err != nil {
@@ -131,7 +131,7 @@ func TestIdempotencyWithConfig(t *testing.T) {
 	testDir := createTestDir(t, "idempotency-config")
 
 	// バイナリをビルド
-	binary := filepath.Join(testDir, "terraform-file-organize")
+	binary := filepath.Join(testDir, "tf-file-organize")
 	cmd := exec.Command("go", "build", "-o", binary)
 	err := cmd.Run()
 	if err != nil {
@@ -173,7 +173,7 @@ output "service_url" {
 	}
 
 	// 設定ファイルを作成
-	configFile := filepath.Join(testDir, "terraform-file-organize.yaml")
+	configFile := filepath.Join(testDir, "tf-file-organize.yaml")
 	configContent := `
 groups:
   - name: "data_blocks"
@@ -244,7 +244,7 @@ func getCreatedFiles(dir string) ([]string, error) {
 	var files []string
 	for _, entry := range entries {
 		if !entry.IsDir() && strings.HasSuffix(entry.Name(), ".tf") &&
-			entry.Name() != "terraform-file-organize.yaml" {
+			entry.Name() != "tf-file-organize.yaml" {
 			// フルパスで返す
 			files = append(files, filepath.Join(dir, entry.Name()))
 		}

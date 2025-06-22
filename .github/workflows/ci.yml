@@ -74,10 +74,10 @@ jobs:
         cache: true
         
     - name: Build
-      run: go build -v -o terraform-file-organize .
+      run: go build -v -o tf-file-organize .
       
     - name: Test binary
       run: |
-        ./terraform-file-organize --help
-        ./terraform-file-organize testdata/terraform/sample.tf --dry-run
+        ./tf-file-organize --help
+        ./tf-file-organize testdata/terraform/sample.tf --dry-run
 

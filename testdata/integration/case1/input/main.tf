@@ -26,7 +26,7 @@ variable "key_name" {
 locals {
   common_tags = {
     Environment = "test"
-    Project     = "terraform-file-organize"
+    Project     = "tf-file-organize"
   }
 }
 

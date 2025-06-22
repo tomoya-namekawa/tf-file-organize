@@ -11,7 +11,7 @@ import (
 	"github.com/hashicorp/hcl/v2/hclparse"
 	"github.com/hashicorp/hcl/v2/hclsyntax"
 
-	"github.com/tomoya-namekawa/terraform-file-organize/pkg/types"
+	"github.com/tomoya-namekawa/tf-file-organize/pkg/types"
 )
 
 // Parser handles parsing of Terraform configuration files using HCL.

@@ -9,8 +9,8 @@ import (
 	"github.com/hashicorp/hcl/v2"
 	"github.com/hashicorp/hcl/v2/hclparse"
 
-	"github.com/tomoya-namekawa/terraform-file-organize/internal/writer"
-	"github.com/tomoya-namekawa/terraform-file-organize/pkg/types"
+	"github.com/tomoya-namekawa/tf-file-organize/internal/writer"
+	"github.com/tomoya-namekawa/tf-file-organize/pkg/types"
 )
 
 func createTestBlockGroup(filename, blockType string, blocks []*types.Block) *types.BlockGroup {

@@ -37,8 +37,8 @@ tmp/*
 !tmp/.gitkeep
 
 # build artifacts
-terraform-file-organize
-terraform-file-organize-test
+tf-file-organize
+tf-file-organize-test
 
 # Terraform関連ファイル（機密情報保護）
 *.tfstate

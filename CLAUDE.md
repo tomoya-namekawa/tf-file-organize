@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-terraform-file-organize is a Go CLI tool that parses Terraform files and splits them into separate files organized by resource type. The tool uses HashiCorp's HCL parser to analyze Terraform configurations and reorganizes them according to specific naming conventions. It supports both single file and directory input, with optional YAML configuration for custom grouping rules.
+tf-file-organize is a Go CLI tool that parses Terraform files and splits them into separate files organized by resource type. The tool uses HashiCorp's HCL parser to analyze Terraform configurations and reorganizes them according to specific naming conventions. It supports both single file and directory input, with optional YAML configuration for custom grouping rules.
 
 ## Quick Start
 
@@ -22,13 +22,13 @@ mise list
 ### Build and Basic Usage
 ```bash
 # Build the project
-go build -o terraform-file-organize
+go build -o tf-file-organize
 
 # Basic usage examples
-./terraform-file-organize plan main.tf
-./terraform-file-organize run . --output-dir tmp/test
-./terraform-file-organize run testdata/terraform --config testdata/configs/terraform-file-organize.yaml
-./terraform-file-organize validate-config testdata/configs/terraform-file-organize.yaml
+./tf-file-organize plan main.tf
+./tf-file-organize run . --output-dir tmp/test
+./tf-file-organize run testdata/terraform --config testdata/configs/tf-file-organize.yaml
+./tf-file-organize validate-config testdata/configs/tf-file-organize.yaml
 ```
 
 ### Essential Development Commands
@@ -41,7 +41,7 @@ go tool cover -func=coverage.out
 
 # Critical regression tests
 go test -run TestGoldenFiles -v
-go build && ./terraform-file-organize plan testdata/terraform/sample.tf
+go build && ./tf-file-organize plan testdata/terraform/sample.tf
 
 # Workflow validation
 actionlint
@@ -96,10 +96,10 @@ Built with Cobra framework using subcommand architecture (`cmd/`). Recent refact
 ### Configuration System
 
 Auto-searches for configuration files in this order:
-1. `terraform-file-organize.yaml`
-2. `terraform-file-organize.yml`
-3. `.terraform-file-organize.yaml`
-4. `.terraform-file-organize.yml`
+1. `tf-file-organize.yaml`
+2. `tf-file-organize.yml`
+3. `.tf-file-organize.yaml`
+4. `.tf-file-organize.yml`
 
 **Configuration features:**
 - **Groups**: Custom file grouping with complex pattern matching:
@@ -231,8 +231,8 @@ go test -v -coverprofile=coverage.out ./...
 go test -run TestGoldenFiles -v
 
 # 4. Build and integration test
-go build -o terraform-file-organize
-./terraform-file-organize plan testdata/terraform/sample.tf
+go build -o tf-file-organize
+./tf-file-organize plan testdata/terraform/sample.tf
 
 # 5. Workflow validation
 actionlint

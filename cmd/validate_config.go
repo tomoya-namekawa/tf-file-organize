@@ -6,15 +6,15 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/tomoya-namekawa/terraform-file-organize/internal/config"
-	"github.com/tomoya-namekawa/terraform-file-organize/internal/validation"
+	"github.com/tomoya-namekawa/tf-file-organize/internal/config"
+	"github.com/tomoya-namekawa/tf-file-organize/internal/validation"
 )
 
 // validateConfigCmd represents the validate-config command
 var validateConfigCmd = &cobra.Command{
 	Use:   "validate-config <config-file>",
 	Short: "Validate configuration file",
-	Long: `Validate the syntax and content of a terraform-file-organize configuration file.
+	Long: `Validate the syntax and content of a tf-file-organize configuration file.
 
 This command checks:
 - YAML syntax

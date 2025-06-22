@@ -1,4 +1,4 @@
-# terraform-file-organize
+# tf-file-organize
 
 Terraformファイルをリソースタイプごとに分割・整理するGoのCLIツールです。
 
@@ -27,22 +27,22 @@ Terraformファイルをリソースタイプごとに分割・整理するGoの
 
 ```bash
 # 最新版をインストール
-go install github.com/tomoya-namekawa/terraform-file-organize@latest
+go install github.com/tomoya-namekawa/tf-file-organize@latest
 
 # 特定のバージョンをインストール
-go install github.com/tomoya-namekawa/terraform-file-organize@v1.0.0
+go install github.com/tomoya-namekawa/tf-file-organize@v1.0.0
 ```
 
 ### バイナリのダウンロード
 
-[GitHub Releases](https://github.com/tomoya-namekawa/terraform-file-organize/releases) から各プラットフォーム用のバイナリをダウンロードできます。
+[GitHub Releases](https://github.com/tomoya-namekawa/tf-file-organize/releases) から各プラットフォーム用のバイナリをダウンロードできます。
 
 ### ソースからビルド
 
 ```bash
-git clone https://github.com/tomoya-namekawa/terraform-file-organize.git
-cd terraform-file-organize
-go build -o terraform-file-organize
+git clone https://github.com/tomoya-namekawa/tf-file-organize.git
+cd tf-file-organize
+go build -o tf-file-organize
 ```
 
 ## 使用方法
@@ -51,35 +51,35 @@ go build -o terraform-file-organize
 
 ```bash
 # プレビューモード（実際のファイル作成なし）
-terraform-file-organize plan main.tf
+tf-file-organize plan main.tf
 
 # ファイルを実際に整理（元ファイルは削除）
-terraform-file-organize run main.tf
+tf-file-organize run main.tf
 
 # バックアップ付きで整理（元ファイルはbackupディレクトリに移動）
-terraform-file-organize run main.tf --backup
+tf-file-organize run main.tf --backup
 
 # ディレクトリ全体を整理
-terraform-file-organize run ./terraform-configs
+tf-file-organize run ./terraform-configs
 
 # カスタム出力ディレクトリを指定
-terraform-file-organize run main.tf --output-dir ./organized
+tf-file-organize run main.tf --output-dir ./organized
 
 # 設定ファイルを使用してカスタムグループ化
-terraform-file-organize run . --config terraform-file-organize.yaml
+tf-file-organize run . --config tf-file-organize.yaml
 
 # 設定ファイルの検証
-terraform-file-organize validate-config terraform-file-organize.yaml
+tf-file-organize validate-config tf-file-organize.yaml
 ```
 
 ### サブコマンド
 
 | コマンド | 説明 | 使用例 |
 |---------|------|--------|
-| `run` | ファイルを実際に整理・作成 | `terraform-file-organize run main.tf` |
-| `plan` | プレビューモード（dry-run） | `terraform-file-organize plan main.tf` |
-| `validate-config` | 設定ファイルの検証 | `terraform-file-organize validate-config config.yaml` |
-| `version` | バージョン情報を表示 | `terraform-file-organize version` |
+| `run` | ファイルを実際に整理・作成 | `tf-file-organize run main.tf` |
+| `plan` | プレビューモード（dry-run） | `tf-file-organize plan main.tf` |
+| `validate-config` | 設定ファイルの検証 | `tf-file-organize validate-config config.yaml` |
+| `version` | バージョン情報を表示 | `tf-file-organize version` |
 
 ### オプション
 
@@ -112,15 +112,15 @@ terraform-file-organize validate-config terraform-file-organize.yaml
 
 ツールは以下の順序で設定ファイルを自動検出します：
 
-1. `terraform-file-organize.yaml`
-2. `terraform-file-organize.yml`
-3. `.terraform-file-organize.yaml`
-4. `.terraform-file-organize.yml`
+1. `tf-file-organize.yaml`
+2. `tf-file-organize.yml`
+3. `.tf-file-organize.yaml`
+4. `.tf-file-organize.yml`
 
 ### 設定例
 
 ```yaml
-# terraform-file-organize.yaml
+# tf-file-organize.yaml
 groups:
   # AWSネットワーク関連をまとめる
   - name: "network"
@@ -228,22 +228,22 @@ data "aws_ami" "ubuntu" {
 
 ```bash
 # 現在のプロジェクトをプレビュー
-terraform-file-organize plan .
+tf-file-organize plan .
 # → ファイル分割の結果をプレビュー
 
 # バックアップ付きで実際に分割実行
-terraform-file-organize run . --backup
+tf-file-organize run . --backup
 # → 元ファイルはbackup/に移動、整理されたファイルを作成
 
 # 設定ファイル付きで整理
-terraform-file-organize run . --config my-config.yaml
+tf-file-organize run . --config my-config.yaml
 ```
 
 ### CI/CDでの活用
 
 ```bash
 # 設定ファイルをプロジェクトに配置
-cat > terraform-file-organize.yaml << 'EOF'
+cat > tf-file-organize.yaml << 'EOF'
 groups:
   - name: infrastructure
     filename: infrastructure.tf
@@ -262,10 +262,10 @@ exclude_files:
 EOF
 
 # 設定の検証
-terraform-file-organize validate-config terraform-file-organize.yaml
+tf-file-organize validate-config tf-file-organize.yaml
 
 # 自動整理（設定ファイル自動検出）
-terraform-file-organize run .
+tf-file-organize run .
 ```
 
 ## 冪等性とファイル管理

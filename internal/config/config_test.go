@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/tomoya-namekawa/terraform-file-organize/internal/config"
+	"github.com/tomoya-namekawa/tf-file-organize/internal/config"
 )
 
 func TestLoadConfig(t *testing.T) {

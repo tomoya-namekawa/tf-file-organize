@@ -1,5 +1,5 @@
 # Variables
-BINARY_NAME=terraform-file-organize
+BINARY_NAME=tf-file-organize
 
 .PHONY: dev-build
 dev-build:

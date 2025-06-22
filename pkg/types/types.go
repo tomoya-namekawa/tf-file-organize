@@ -1,4 +1,4 @@
-// Package types defines the core data structures used throughout the terraform-file-organize application.
+// Package types defines the core data structures used throughout the tf-file-organize application.
 package types
 
 import "github.com/hashicorp/hcl/v2"

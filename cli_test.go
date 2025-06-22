@@ -27,7 +27,7 @@ func TestCLIBasicUsage(t *testing.T) {
 	testDir := createTestDir(t, "basic")
 
 	// バイナリをビルド
-	binary := filepath.Join(testDir, "terraform-file-organize")
+	binary := filepath.Join(testDir, "tf-file-organize")
 	cmd := exec.Command("go", "build", "-o", binary)
 	err := cmd.Run()
 	if err != nil {
@@ -90,7 +90,7 @@ func TestCLIPlan(t *testing.T) {
 	// テスト用ディレクトリを作成
 	testDir := createTestDir(t, "plan")
 
-	binary := filepath.Join(testDir, "terraform-file-organize")
+	binary := filepath.Join(testDir, "tf-file-organize")
 	cmd := exec.Command("go", "build", "-o", binary)
 	err := cmd.Run()
 	if err != nil {
@@ -133,7 +133,7 @@ func TestCLIDirectoryInput(t *testing.T) {
 	// テスト用ディレクトリを作成
 	testDir := createTestDir(t, "directory")
 
-	binary := filepath.Join(testDir, "terraform-file-organize")
+	binary := filepath.Join(testDir, "tf-file-organize")
 	cmd := exec.Command("go", "build", "-o", binary)
 	err := cmd.Run()
 	if err != nil {
@@ -208,7 +208,7 @@ func TestCLIRecursiveDirectoryInput(t *testing.T) {
 	// テスト用ディレクトリを作成
 	testDir := createTestDir(t, "recursive")
 
-	binary := filepath.Join(testDir, "terraform-file-organize")
+	binary := filepath.Join(testDir, "tf-file-organize")
 	cmd := exec.Command("go", "build", "-o", binary)
 	err := cmd.Run()
 	if err != nil {
@@ -289,7 +289,7 @@ func TestCLIWithConfigFile(t *testing.T) {
 	// テスト用ディレクトリを作成
 	testDir := createTestDir(t, "config")
 
-	binary := filepath.Join(testDir, "terraform-file-organize")
+	binary := filepath.Join(testDir, "tf-file-organize")
 	cmd := exec.Command("go", "build", "-o", binary)
 	err := cmd.Run()
 	if err != nil {
@@ -369,7 +369,7 @@ func TestCLIAutoConfigDetection(t *testing.T) {
 	// テスト用ディレクトリを作成
 	testDir := createTestDir(t, "autoconfig")
 
-	binary := filepath.Join(testDir, "terraform-file-organize")
+	binary := filepath.Join(testDir, "tf-file-organize")
 	cmd := exec.Command("go", "build", "-o", binary)
 	err := cmd.Run()
 	if err != nil {
@@ -377,7 +377,7 @@ func TestCLIAutoConfigDetection(t *testing.T) {
 	}
 
 	inputFile := filepath.Join(testDir, "main.tf")
-	configFile := filepath.Join(testDir, "terraform-file-organize.yaml")
+	configFile := filepath.Join(testDir, "tf-file-organize.yaml")
 	outputDir := filepath.Join(testDir, "split")
 
 	tfContent := `
@@ -443,7 +443,7 @@ func TestCLIErrorHandling(t *testing.T) {
 	// テスト用ディレクトリを作成
 	testDir := createTestDir(t, "error")
 
-	binary := filepath.Join(testDir, "terraform-file-organize")
+	binary := filepath.Join(testDir, "tf-file-organize")
 	cmd := exec.Command("go", "build", "-o", binary)
 	err := cmd.Run()
 	if err != nil {
@@ -498,7 +498,7 @@ func TestCLIIncompatibleFlags(t *testing.T) {
 	// テスト用ディレクトリを作成
 	testDir := createTestDir(t, "incompatible")
 
-	binary := filepath.Join(testDir, "terraform-file-organize")
+	binary := filepath.Join(testDir, "tf-file-organize")
 	cmd := exec.Command("go", "build", "-o", binary)
 	err := cmd.Run()
 	if err != nil {

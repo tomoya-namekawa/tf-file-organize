@@ -14,7 +14,7 @@ import (
 	"github.com/hashicorp/hcl/v2/hclwrite"
 	"github.com/zclconf/go-cty/cty"
 
-	"github.com/tomoya-namekawa/terraform-file-organize/pkg/types"
+	"github.com/tomoya-namekawa/tf-file-organize/pkg/types"
 )
 
 // emptyBlockSchema is used when we don't need to parse internal structure and prefer RawBody.

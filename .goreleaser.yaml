@@ -1,6 +1,6 @@
 version: 2
 
-project_name: terraform-file-organize
+project_name: tf-file-organize
 
 before:
   hooks:
@@ -19,10 +19,10 @@ builds:
       - arm64
     ldflags:
       - -s -w
-      - -X github.com/tomoya-namekawa/terraform-file-organize/internal/version.Version={{.Version}}
-      - -X github.com/tomoya-namekawa/terraform-file-organize/internal/version.GitCommit={{.FullCommit}}
-      - -X github.com/tomoya-namekawa/terraform-file-organize/internal/version.GitTag={{.Tag}}
-      - -X github.com/tomoya-namekawa/terraform-file-organize/internal/version.BuildDate={{.Date}}
+      - -X github.com/tomoya-namekawa/tf-file-organize/internal/version.Version={{.Version}}
+      - -X github.com/tomoya-namekawa/tf-file-organize/internal/version.GitCommit={{.FullCommit}}
+      - -X github.com/tomoya-namekawa/tf-file-organize/internal/version.GitTag={{.Tag}}
+      - -X github.com/tomoya-namekawa/tf-file-organize/internal/version.BuildDate={{.Date}}
 
 archives:
   - formats:
@@ -52,7 +52,7 @@ changelog:
 release:
   github:
     owner: tomoya-namekawa
-    name: terraform-file-organize
+    name: tf-file-organize
   draft: false
   prerelease: auto
   mode: replace
@@ -65,7 +65,7 @@ release:
     
     ### Go Install
     ```bash
-    go install github.com/tomoya-namekawa/terraform-file-organize@{{ .Tag }}
+    go install github.com/tomoya-namekawa/tf-file-organize@{{ .Tag }}
     ```
     
     ### Download Binary
@@ -73,8 +73,8 @@ release:
 
 # Homebrew formula configuration (disabled until tap repository is created)
 # brews:
-#   - name: terraform-file-organize
-#     homepage: https://github.com/tomoya-namekawa/terraform-file-organize
+#   - name: tf-file-organize
+#     homepage: https://github.com/tomoya-namekawa/tf-file-organize
 #     description: "A CLI tool to organize Terraform files by resource type"
 #     license: MIT
 #     repository:
@@ -86,6 +86,6 @@ release:
 #       email: bot@goreleaser.com
 #     directory: Formula
 #     install: |
-#       bin.install "terraform-file-organize"
+#       bin.install "tf-file-organize"
 #     test: |
-#       system "#{bin}/terraform-file-organize", "version"
+#       system "#{bin}/tf-file-organize", "version"

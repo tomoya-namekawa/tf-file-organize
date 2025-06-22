@@ -99,7 +99,7 @@ func GetBuildInfo() string {
 		}
 	}
 
-	return fmt.Sprintf(`terraform-file-organize %s
+	return fmt.Sprintf(`tf-file-organize %s
 Built with: %s
 Build date: %s`, version, GoVersion, buildDate)
 }

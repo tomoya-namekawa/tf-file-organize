@@ -3,7 +3,7 @@ package usecase_test
 import (
 	"testing"
 
-	"github.com/tomoya-namekawa/terraform-file-organize/internal/usecase"
+	"github.com/tomoya-namekawa/tf-file-organize/internal/usecase"
 )
 
 func TestDefaultConfigLoader_LoadConfig(t *testing.T) {

@@ -5,7 +5,7 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/tomoya-namekawa/terraform-file-organize/internal/version"
+	"github.com/tomoya-namekawa/tf-file-organize/internal/version"
 )
 
 // versionCmd represents the version command

@@ -6,11 +6,11 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/tomoya-namekawa/terraform-file-organize/internal/config"
-	"github.com/tomoya-namekawa/terraform-file-organize/internal/parser"
-	"github.com/tomoya-namekawa/terraform-file-organize/internal/splitter"
-	"github.com/tomoya-namekawa/terraform-file-organize/internal/writer"
-	"github.com/tomoya-namekawa/terraform-file-organize/pkg/types"
+	"github.com/tomoya-namekawa/tf-file-organize/internal/config"
+	"github.com/tomoya-namekawa/tf-file-organize/internal/parser"
+	"github.com/tomoya-namekawa/tf-file-organize/internal/splitter"
+	"github.com/tomoya-namekawa/tf-file-organize/internal/writer"
+	"github.com/tomoya-namekawa/tf-file-organize/pkg/types"
 )
 
 // Default Terraform file names
@@ -101,10 +101,10 @@ func (d *DefaultConfigLoader) LoadConfig(configPath string) (*config.Config, err
 
 	// 設定ファイルが指定されていない場合はデフォルトを探す
 	defaultConfigs := []string{
-		"terraform-file-organize.yaml",
-		"terraform-file-organize.yml",
-		".terraform-file-organize.yaml",
-		".terraform-file-organize.yml",
+		"tf-file-organize.yaml",
+		"tf-file-organize.yml",
+		".tf-file-organize.yaml",
+		".tf-file-organize.yml",
 	}
 
 	for _, defaultConfig := range defaultConfigs {

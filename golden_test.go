@@ -55,7 +55,7 @@ func TestGoldenFiles(t *testing.T) {
 			}
 
 			// バイナリをビルド（キャッシュされる）
-			binary := filepath.Join(t.TempDir(), "terraform-file-organize")
+			binary := filepath.Join(t.TempDir(), "tf-file-organize")
 			buildCmd := exec.Command("go", "build", "-o", binary)
 			err := buildCmd.Run()
 			if err != nil {
@@ -63,7 +63,7 @@ func TestGoldenFiles(t *testing.T) {
 			}
 
 			// 設定ファイルのパスを決定
-			configPath := filepath.Join(caseDir, "terraform-file-organize.yaml")
+			configPath := filepath.Join(caseDir, "tf-file-organize.yaml")
 			var args []string
 			args = append(args, "run", inputDir, "--output-dir", actualDir)
 			if _, statErr := os.Stat(configPath); statErr == nil {
@@ -199,7 +199,7 @@ func BenchmarkFileProcessing(b *testing.B) {
 	outputDir := filepath.Join("tmp", "benchmark-test")
 
 	// バイナリをビルド（ベンチマーク実行前に一度だけ）
-	binary := filepath.Join(b.TempDir(), "terraform-file-organize")
+	binary := filepath.Join(b.TempDir(), "tf-file-organize")
 	buildCmd := exec.Command("go", "build", "-o", binary)
 	err := buildCmd.Run()
 	if err != nil {

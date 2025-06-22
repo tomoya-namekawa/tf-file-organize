@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/tomoya-namekawa/terraform-file-organize/internal/validation"
+	"github.com/tomoya-namekawa/tf-file-organize/internal/validation"
 )
 
 func TestValidatePath(t *testing.T) {

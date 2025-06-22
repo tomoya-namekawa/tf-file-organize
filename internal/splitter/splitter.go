@@ -8,8 +8,8 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/tomoya-namekawa/terraform-file-organize/internal/config"
-	"github.com/tomoya-namekawa/terraform-file-organize/pkg/types"
+	"github.com/tomoya-namekawa/tf-file-organize/internal/config"
+	"github.com/tomoya-namekawa/tf-file-organize/pkg/types"
 )
 
 // Terraform block type constants

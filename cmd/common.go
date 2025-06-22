@@ -3,8 +3,8 @@ package cmd
 import (
 	"fmt"
 
-	"github.com/tomoya-namekawa/terraform-file-organize/internal/usecase"
-	"github.com/tomoya-namekawa/terraform-file-organize/internal/validation"
+	"github.com/tomoya-namekawa/tf-file-organize/internal/usecase"
+	"github.com/tomoya-namekawa/tf-file-organize/internal/validation"
 )
 
 // executeOrganizeFiles validates inputs and executes the organize files usecase

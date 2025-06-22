@@ -1,4 +1,4 @@
-// Package config provides configuration management for terraform-file-organize,
+// Package config provides configuration management for tf-file-organize,
 // including custom grouping rules, overrides, and exclusion patterns.
 package config
 

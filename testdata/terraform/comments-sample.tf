@@ -30,7 +30,7 @@ variable "instance_type" {
 locals {
   common_tags = {
     Environment = "dev"
-    Project     = "terraform-file-organize"
+    Project     = "tf-file-organize"
   }
 }
 

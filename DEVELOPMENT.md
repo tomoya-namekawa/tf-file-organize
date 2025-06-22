@@ -1,6 +1,6 @@
 # 開発ガイド
 
-terraform-file-organizeの開発に関する詳細なガイドです。
+tf-file-organizeの開発に関する詳細なガイドです。
 
 ## 開発環境のセットアップ
 
@@ -23,14 +23,14 @@ mise list
 
 ```bash
 # リポジトリのクローン
-git clone https://github.com/tomoya-namekawa/terraform-file-organize.git
-cd terraform-file-organize
+git clone https://github.com/tomoya-namekawa/tf-file-organize.git
+cd tf-file-organize
 
 # 依存関係のインストール
 go mod tidy
 
 # ビルド
-go build -o terraform-file-organize
+go build -o tf-file-organize
 ```
 
 ## 開発コマンド
@@ -39,7 +39,7 @@ go build -o terraform-file-organize
 
 ```bash
 # プロジェクトビルド
-go build -o terraform-file-organize
+go build -o tf-file-organize
 
 # 全テストの実行
 go test -v -coverprofile=coverage.out ./...
@@ -80,16 +80,16 @@ actionlint
 
 ```bash
 # プレビューモード
-./terraform-file-organize plan testdata/terraform/sample.tf
+./tf-file-organize plan testdata/terraform/sample.tf
 
 # ディレクトリ処理
-./terraform-file-organize plan testdata/terraform
+./tf-file-organize plan testdata/terraform
 
 # 設定ファイル付きテスト
-./terraform-file-organize plan testdata/terraform --config testdata/configs/terraform-file-organize.yaml
+./tf-file-organize plan testdata/terraform --config testdata/configs/tf-file-organize.yaml
 
 # 設定ファイル検証
-./terraform-file-organize validate-config testdata/configs/terraform-file-organize.yaml
+./tf-file-organize validate-config testdata/configs/tf-file-organize.yaml
 ```
 
 ## アーキテクチャ
@@ -200,8 +200,8 @@ go test -v -coverprofile=coverage.out ./...
 go test -run TestGoldenFiles -v
 
 # 4. ビルドと統合テスト
-go build -o terraform-file-organize
-./terraform-file-organize plan testdata/terraform/sample.tf
+go build -o tf-file-organize
+./tf-file-organize plan testdata/terraform/sample.tf
 
 # 5. ワークフロー検証
 actionlint
@@ -333,7 +333,7 @@ cp tmp/integration-test/case*/* testdata/integration/case*/expected/
 go test ./internal/splitter -run TestGroupBlocksWithConfig -v
 
 # 設定ファイル検証
-./terraform-file-organize validate-config testdata/configs/terraform-file-organize.yaml
+./tf-file-organize validate-config testdata/configs/tf-file-organize.yaml
 ```
 
 ## 貢献ガイドライン

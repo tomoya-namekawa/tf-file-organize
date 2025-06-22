@@ -88,7 +88,7 @@ formatters:
   settings:
     goimports:
       local-prefixes:
-        - github.com/tomoya-namekawa/terraform-file-organize
+        - github.com/tomoya-namekawa/tf-file-organize
   exclusions:
     generated: lax
     paths:
