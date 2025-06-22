@@ -9,7 +9,6 @@ import (
 )
 
 func TestLoadConfig(t *testing.T) {
-	// テスト用の一時設定ファイルを作成
 	tmpDir := t.TempDir()
 	configPath := filepath.Join(tmpDir, "test-config.yaml")
 
@@ -29,13 +28,10 @@ exclude_files:
 		t.Fatalf("Failed to create test config file: %v", err)
 	}
 
-	// 設定ファイルを読み込み
 	cfg, err := config.LoadConfig(configPath)
 	if err != nil {
 		t.Fatalf("LoadConfig failed: %v", err)
 	}
-
-	// Groups の検証
 	if len(cfg.Groups) != 1 {
 		t.Errorf("Expected 1 group, got %d", len(cfg.Groups))
 	}
@@ -51,7 +47,6 @@ exclude_files:
 		t.Errorf("Expected 2 patterns, got %d", len(group.Patterns))
 	}
 
-	// ExcludeFiles の検証
 	if len(cfg.ExcludeFiles) != 1 {
 		t.Errorf("Expected 1 exclude file pattern, got %d", len(cfg.ExcludeFiles))
 	}
@@ -150,7 +145,6 @@ func TestIsFileExcluded(t *testing.T) {
 }
 
 func TestPatternMatching(t *testing.T) {
-	// パターンマッチングの統合テスト
 	cfg := &config.Config{
 		Groups: []config.GroupConfig{
 			{
@@ -162,7 +156,6 @@ func TestPatternMatching(t *testing.T) {
 		ExcludeFiles: []string{"*special*.tf", "*test*.tf"},
 	}
 
-	// グループマッチングのテスト
 	testCases := []struct {
 		resourceType string
 		shouldMatch  bool

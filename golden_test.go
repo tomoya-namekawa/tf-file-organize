@@ -1,4 +1,4 @@
-package main
+package main_test
 
 import (
 	"fmt"
@@ -10,8 +10,6 @@ import (
 	"testing"
 )
 
-// TestGoldenFiles はエンドツーエンドのGolden File Testing を実行
-// CLIバイナリ経由で実際の出力と期待される出力を比較し、品質保証と回帰テストを行う
 func TestGoldenFiles(t *testing.T) {
 	testCases := []struct {
 		name        string
@@ -46,7 +44,6 @@ func TestGoldenFiles(t *testing.T) {
 			expectedDir := filepath.Join(caseDir, "expected")
 			actualDir := filepath.Join("tmp", "integration-test", tc.name)
 
-			// 出力ディレクトリをクリーンアップしてから作成
 			if err := os.RemoveAll(actualDir); err != nil {
 				t.Fatalf("Failed to remove existing output directory: %v", err)
 			}
@@ -54,7 +51,6 @@ func TestGoldenFiles(t *testing.T) {
 				t.Fatalf("Failed to create output directory: %v", err)
 			}
 
-			// バイナリをビルド（キャッシュされる）
 			binary := filepath.Join(t.TempDir(), "tf-file-organize")
 			buildCmd := exec.Command("go", "build", "-o", binary)
 			err := buildCmd.Run()
@@ -62,7 +58,6 @@ func TestGoldenFiles(t *testing.T) {
 				t.Fatalf("Failed to build binary: %v", err)
 			}
 
-			// 設定ファイルのパスを決定
 			configPath := filepath.Join(caseDir, "tf-file-organize.yaml")
 			var args []string
 			args = append(args, "run", inputDir, "--output-dir", actualDir)
@@ -70,14 +65,12 @@ func TestGoldenFiles(t *testing.T) {
 				args = append(args, "--config", configPath)
 			}
 
-			// CLIバイナリ経由でファイル分割を実行
 			cmd := exec.Command(binary, args...)
 			output, err := cmd.CombinedOutput()
 			if err != nil {
 				t.Fatalf("Failed to process directory: %v\nOutput: %s", err, output)
 			}
 
-			// 期待される出力と実際の出力を比較
 			if err := compareDirectories(t, expectedDir, actualDir); err != nil {
 				t.Errorf("Golden file test failed for %s: %v", tc.name, err)
 			}
@@ -85,7 +78,6 @@ func TestGoldenFiles(t *testing.T) {
 	}
 }
 
-// compareDirectories は2つのディレクトリの内容を比較
 func compareDirectories(t *testing.T, expectedDir, actualDir string) error {
 	expectedFiles, err := getFileList(expectedDir)
 	if err != nil {
@@ -97,7 +89,6 @@ func compareDirectories(t *testing.T, expectedDir, actualDir string) error {
 		return fmt.Errorf("failed to list actual files: %w", err)
 	}
 
-	// ファイル数とファイル名の比較
 	if len(expectedFiles) != len(actualFiles) {
 		return fmt.Errorf("file count mismatch: expected %d, got %d\nExpected: %v\nActual: %v",
 			len(expectedFiles), len(actualFiles), expectedFiles, actualFiles)
@@ -110,7 +101,6 @@ func compareDirectories(t *testing.T, expectedDir, actualDir string) error {
 		}
 	}
 
-	// 各ファイルの内容を比較
 	for _, filename := range expectedFiles {
 		expectedPath := filepath.Join(expectedDir, filename)
 		actualPath := filepath.Join(actualDir, filename)
@@ -123,7 +113,6 @@ func compareDirectories(t *testing.T, expectedDir, actualDir string) error {
 	return nil
 }
 
-// getFileList はディレクトリ内の.tfファイルリストを取得
 func getFileList(dir string) ([]string, error) {
 	var files []string
 
@@ -142,7 +131,6 @@ func getFileList(dir string) ([]string, error) {
 	return files, nil
 }
 
-// compareFiles は2つのファイルの内容を比較
 func compareFiles(_ *testing.T, expectedPath, actualPath string) error {
 	expectedContent, err := os.ReadFile(expectedPath)
 	if err != nil {
@@ -154,7 +142,6 @@ func compareFiles(_ *testing.T, expectedPath, actualPath string) error {
 		return fmt.Errorf("failed to read actual file: %w", err)
 	}
 
-	// 正規化：改行コードを統一し、末尾の空白を削除
 	expectedStr := strings.TrimSpace(normalizeContent(string(expectedContent)))
 	actualStr := strings.TrimSpace(normalizeContent(string(actualContent)))
 
@@ -166,13 +153,10 @@ func compareFiles(_ *testing.T, expectedPath, actualPath string) error {
 	return nil
 }
 
-// normalizeContent はファイル内容を正規化
 func normalizeContent(content string) string {
-	// 改行コードを統一
 	content = strings.ReplaceAll(content, "\r\n", "\n")
 	content = strings.ReplaceAll(content, "\r", "\n")
 
-	// 連続する空行を単一にする
 	lines := strings.Split(content, "\n")
 	var normalizedLines []string
 	var lastLineEmpty bool
@@ -193,12 +177,10 @@ func normalizeContent(content string) string {
 	return strings.Join(normalizedLines, "\n")
 }
 
-// BenchmarkFileProcessing はCLIバイナリのパフォーマンス回帰テスト
 func BenchmarkFileProcessing(b *testing.B) {
 	inputDir := "testdata/integration/case1/input"
 	outputDir := filepath.Join("tmp", "benchmark-test")
 
-	// バイナリをビルド（ベンチマーク実行前に一度だけ）
 	binary := filepath.Join(b.TempDir(), "tf-file-organize")
 	buildCmd := exec.Command("go", "build", "-o", binary)
 	err := buildCmd.Run()
@@ -207,11 +189,9 @@ func BenchmarkFileProcessing(b *testing.B) {
 	}
 
 	for b.Loop() {
-		// 出力ディレクトリをクリア
 		_ = os.RemoveAll(outputDir)
 		_ = os.MkdirAll(outputDir, 0755)
 
-		// CLIバイナリ経由でファイル処理
 		cmd := exec.Command(binary, "run", inputDir, "--output-dir", outputDir)
 		_, err := cmd.CombinedOutput()
 		if err != nil {

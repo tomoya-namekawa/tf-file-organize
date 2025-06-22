@@ -17,7 +17,7 @@ func TestDefaultConfigLoader_LoadConfig(t *testing.T) {
 		{
 			name:    "empty config path",
 			path:    "",
-			wantErr: false, // デフォルト設定を返す
+			wantErr: false, // Return default config
 		},
 		{
 			name:    "nonexistent config file",

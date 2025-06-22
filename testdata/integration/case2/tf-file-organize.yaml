@@ -1,4 +1,4 @@
-# case2: aws_instanceをcompute.tfにグループ化するテスト
+# case2: Test grouping aws_instance into compute.tf
 groups:
   - name: "compute"
     filename: "compute.tf"

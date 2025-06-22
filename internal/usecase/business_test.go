@@ -9,8 +9,7 @@ import (
 	"github.com/tomoya-namekawa/tf-file-organize/pkg/types"
 )
 
-// TestOrganizeFilesUsecase_ExecuteBusinessLogic はビジネスロジックのテスト
-// モックを使用してファイルI/Oなしでコアロジックを検証
+// TestOrganizeFilesUsecase_ExecuteBusinessLogic tests business logic with mocks
 func TestOrganizeFilesUsecase_ExecuteBusinessLogic(t *testing.T) {
 	tests := []struct {
 		name          string
@@ -129,27 +128,20 @@ func TestOrganizeFilesUsecase_ExecuteBusinessLogic(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// モックを作成
 			parser, splitter, writer, configLoader := createMockDependencies()
 
-			// モックのセットアップ
 			if tt.setupMocks != nil {
 				tt.setupMocks(parser, splitter, writer, configLoader)
 			}
 
-			// usecaseを依存性注入で作成
 			uc := usecase.NewOrganizeFilesUsecaseWithDeps(parser, splitter, writer, configLoader)
 
-			// ビジネスロジックをテスト（ファイルI/Oなし）
 			resp, err := testBusinessLogic(uc, tt.blocks, configLoader, splitter, writer)
 
-			// エラーのチェック
 			if (err != nil) != tt.expectedError {
 				t.Errorf("Expected error = %v, got error = %v", tt.expectedError, err)
 				return
 			}
-
-			// レスポンスのチェック
 			if !tt.expectedError {
 				if resp == nil {
 					t.Error("Expected response but got nil")
@@ -163,15 +155,13 @@ func TestOrganizeFilesUsecase_ExecuteBusinessLogic(t *testing.T) {
 	}
 }
 
-// testBusinessLogic はファイルI/Oを使わないビジネスロジックのテスト用ヘルパー
+// testBusinessLogic tests business logic without file I/O
 func testBusinessLogic(_ *usecase.OrganizeFilesUsecase, blocks []*types.Block, configLoader *MockConfigLoader, splitter *MockSplitter, writer *MockWriter) (*usecase.OrganizeFilesResponse, error) {
-	// 設定の読み込み
 	_, err := configLoader.LoadConfig("")
 	if err != nil {
 		return nil, err
 	}
 
-	// ブロックが空の場合の早期リターン
 	if len(blocks) == 0 {
 		return &usecase.OrganizeFilesResponse{
 			ProcessedFiles: 0,
@@ -182,11 +172,9 @@ func testBusinessLogic(_ *usecase.OrganizeFilesUsecase, blocks []*types.Block, c
 		}, nil
 	}
 
-	// スプリッター経由でのグループ化
 	parsedFile := &types.ParsedFile{Blocks: blocks}
 	groups := splitter.GroupBlocks(parsedFile)
 
-	// ライター経由での書き込み
 	err = writer.WriteGroups(groups)
 	if err != nil {
 		return nil, err
@@ -201,8 +189,7 @@ func testBusinessLogic(_ *usecase.OrganizeFilesUsecase, blocks []*types.Block, c
 	}, nil
 }
 
-// TestOrganizeFilesUsecase_ProcessingFlow はビジネスロジックの処理フローをテスト
-// 設定読み込み -> グループ化 -> 書き込みの一連の流れを検証
+// TestOrganizeFilesUsecase_ProcessingFlow tests the processing flow
 func TestOrganizeFilesUsecase_ProcessingFlow(t *testing.T) {
 	parser, splitter, writer, configLoader := createMockDependencies()
 
@@ -211,7 +198,6 @@ func TestOrganizeFilesUsecase_ProcessingFlow(t *testing.T) {
 		{Type: "variable", Labels: []string{"instance_type"}},
 	}
 
-	// モックの設定
 	splitter.groupBlocksFunc = func(parsedFile *types.ParsedFile) []*types.BlockGroup {
 		parsedBlocks := parsedFile.Blocks
 		return []*types.BlockGroup{
@@ -230,7 +216,6 @@ func TestOrganizeFilesUsecase_ProcessingFlow(t *testing.T) {
 
 	uc := usecase.NewOrganizeFilesUsecaseWithDeps(parser, splitter, writer, configLoader)
 
-	// ビジネスロジックをテスト
 	resp, err := testBusinessLogic(uc, blocks, configLoader, splitter, writer)
 
 	if err != nil {

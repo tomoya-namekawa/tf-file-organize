@@ -1,43 +1,28 @@
 # tf-file-organize
 
-Terraformファイルをリソースタイプごとに分割・整理するGoのCLIツールです。
+A Go CLI tool that parses and splits Terraform files by resource type for better organization.
 
-## 概要
+## Overview
 
-大きなTerraformファイルを管理しやすい小さなファイルに分割し、リソースタイプごとに整理します。各ブロックタイプは特定の命名規則に従って別々のファイルに配置されます。
+Splits large Terraform files into manageable smaller files organized by resource type. Each block type is placed in separate files following specific naming conventions.
 
-## 特徴
+## Installation
 
-- 🔧 **完全なTerraformサポート**: すべてのTerraformブロックタイプ（resource、data、variable、output、provider、terraform、locals、module）に対応
-- 📁 **スマートなファイル分割**: リソースタイプごとに論理的にファイルを分割
-- 📂 **ディレクトリ処理**: 単一ファイルまたはディレクトリ全体の一括処理に対応
-- ⚙️ **複雑なパターンマッチング**: サブタイプパターン（`resource.aws_instance.web*`）を含む高度なグループ化
-- 🎯 **直感的な命名規則**: 分かりやすいファイル命名パターン
-- 👀 **プレビューモード**: `plan`コマンドで実際のファイル作成前にプレビュー可能
-- 💾 **バックアップ機能**: `--backup`オプションで元ファイルを安全に保管
-- ⚡ **高速処理**: HashiCorp公式のHCLパーサーを使用
-- 🔒 **冪等性**: 複数回実行しても一貫した結果を保証
-- 💬 **コメント保持**: ブロック内コメントを完全保持
-- 🛡️ **セキュリティ対策**: パストラバーサル攻撃対策など包括的なセキュリティ機能
-- ✅ **包括的テスト**: ゴールデンファイルテストによる回帰防止
-
-## インストール
-
-### go installを使用
+### Using go install
 
 ```bash
-# 最新版をインストール
+# Install latest version
 go install github.com/tomoya-namekawa/tf-file-organize@latest
 
-# 特定のバージョンをインストール
+# Install specific version
 go install github.com/tomoya-namekawa/tf-file-organize@v1.0.0
 ```
 
-### バイナリのダウンロード
+### Download Binary
 
-[GitHub Releases](https://github.com/tomoya-namekawa/tf-file-organize/releases) から各プラットフォーム用のバイナリをダウンロードできます。
+Download platform-specific binaries from [GitHub Releases](https://github.com/tomoya-namekawa/tf-file-organize/releases).
 
-### ソースからビルド
+### Build from Source
 
 ```bash
 git clone https://github.com/tomoya-namekawa/tf-file-organize.git
@@ -45,58 +30,58 @@ cd tf-file-organize
 go build -o tf-file-organize
 ```
 
-## 使用方法
+## Usage
 
-### 基本コマンド
+### Basic Commands
 
 ```bash
-# プレビューモード（実際のファイル作成なし）
+# Preview mode (no actual file creation)
 tf-file-organize plan main.tf
 
-# ファイルを実際に整理（元ファイルは削除）
+# Actually organize files (source files are removed)
 tf-file-organize run main.tf
 
-# バックアップ付きで整理（元ファイルはbackupディレクトリに移動）
+# Organize with backup (source files moved to backup directory)
 tf-file-organize run main.tf --backup
 
-# ディレクトリ全体を整理
+# Organize entire directory
 tf-file-organize run ./terraform-configs
 
-# カスタム出力ディレクトリを指定
+# Specify custom output directory
 tf-file-organize run main.tf --output-dir ./organized
 
-# 設定ファイルを使用してカスタムグループ化
+# Use config file for custom grouping
 tf-file-organize run . --config tf-file-organize.yaml
 
-# 設定ファイルの検証
+# Validate configuration file
 tf-file-organize validate-config tf-file-organize.yaml
 ```
 
-### サブコマンド
+### Subcommands
 
-| コマンド | 説明 | 使用例 |
-|---------|------|--------|
-| `run` | ファイルを実際に整理・作成 | `tf-file-organize run main.tf` |
-| `plan` | プレビューモード（dry-run） | `tf-file-organize plan main.tf` |
-| `validate-config` | 設定ファイルの検証 | `tf-file-organize validate-config config.yaml` |
-| `version` | バージョン情報を表示 | `tf-file-organize version` |
+| Command | Description | Example |
+|---------|-------------|---------|
+| `run` | Actually organize and create files | `tf-file-organize run main.tf` |
+| `plan` | Preview mode (dry-run) | `tf-file-organize plan main.tf` |
+| `validate-config` | Validate configuration file | `tf-file-organize validate-config config.yaml` |
+| `version` | Show version information | `tf-file-organize version` |
 
-### オプション
+### Options
 
-#### runコマンド
-- `<input-path>`: 入力Terraformファイルまたはディレクトリ（必須・位置引数）
-- `-o, --output-dir`: 出力ディレクトリ（デフォルト: 入力パスと同じ）
-- `-c, --config`: 設定ファイルパス（デフォルト: 自動検出）
-- `-r, --recursive`: ディレクトリを再帰的に処理
-- `--backup`: 元ファイルをbackupディレクトリに移動
+#### run command
+- `<input-path>`: Input Terraform file or directory (required positional argument)
+- `-o, --output-dir`: Output directory (default: same as input path)
+- `-c, --config`: Configuration file path (default: auto-detect)
+- `-r, --recursive`: Process directories recursively
+- `--backup`: Move original files to backup directory
 
-#### planコマンド
-- 同じオプション（`--backup`を除く）
+#### plan command
+- Same options (except `--backup`)
 
-## ファイル命名規則
+## File Naming Convention
 
-| ブロックタイプ | 命名規則 | 例 |
-|---------------|----------|-----|
+| Block Type | Naming Convention | Example |
+|------------|-------------------|---------|
 | resource | `resource__{resource_type}.tf` | `resource__aws_instance.tf` |
 | data | `data__{data_source_type}.tf` | `data__aws_ami.tf` |
 | variable | `variables.tf` | `variables.tf` |
@@ -106,23 +91,23 @@ tf-file-organize validate-config tf-file-organize.yaml
 | locals | `locals.tf` | `locals.tf` |
 | module | `module__{module_name}.tf` | `module__vpc.tf` |
 
-## 設定ファイル
+## Configuration File
 
-### 自動検出
+### Auto-detection
 
-ツールは以下の順序で設定ファイルを自動検出します：
+The tool automatically detects configuration files in the following order:
 
 1. `tf-file-organize.yaml`
 2. `tf-file-organize.yml`
 3. `.tf-file-organize.yaml`
 4. `.tf-file-organize.yml`
 
-### 設定例
+### Configuration Example
 
 ```yaml
 # tf-file-organize.yaml
 groups:
-  # AWSネットワーク関連をまとめる
+  # Group AWS network resources
   - name: "network"
     filename: "network.tf"
     patterns:
@@ -130,14 +115,14 @@ groups:
       - "aws_subnet"
       - "aws_security_group*"
 
-  # AWSコンピュート関連をまとめる
+  # Group AWS compute resources
   - name: "compute"
     filename: "compute.tf"
     patterns:
       - "aws_instance"
       - "aws_lb*"
 
-  # サブタイプパターンの使用例
+  # Sub-type pattern example
   - name: "web_infrastructure"
     filename: "web-infra.tf"
     patterns:
@@ -145,7 +130,7 @@ groups:
       - "resource.aws_lb.web*"
       - "resource.aws_security_group.web"
 
-  # 変数とoutputのカスタマイズ
+  # Customize variables and outputs
   - name: "variables"
     filename: "vars.tf"
     patterns:
@@ -156,32 +141,37 @@ groups:
     patterns:
       - "output.debug_*"
 
-# ファイル名パターンで除外（個別ファイルのまま）
+# Exclude files by name pattern (keep as individual files)
 exclude_files:
   - "*special*.tf"
   - "debug-*.tf"
 ```
 
-### パターンマッチング機能
+### Pattern Matching Features
 
-- **シンプルパターン**: `aws_s3_*`でS3関連リソースを一括指定
-- **サブタイプパターン**: `resource.aws_instance.web*`で特定のリソース名パターンを指定
-- **ブロックタイプパターン**: `variable`、`output.debug_*`でブロックタイプを指定
-- **複数ワイルドカード**: `*special*`のように複数の`*`を使用可能
+- **Simple Patterns**: `aws_s3_*` to match all S3-related resources
+- **Sub-type Patterns**: `resource.aws_instance.web*` to match specific resource name patterns
+- **Block Type Patterns**: `variable`, `output.debug_*` to match block types
+- **Multiple Wildcards**: Multiple `*` wildcards allowed like `*special*`
 
-## 実用例
+## Examples
 
-### 入力ファイル（main.tf）
+### Basic Usage
 
+```bash
+# Step 1: Preview what will happen (safe to run)
+tf-file-organize plan main.tf
+
+# Step 2: Actually organize the files
+tf-file-organize run main.tf
+```
+
+### Before and After
+
+**Before** - One large file (`main.tf`):
 ```hcl
 terraform {
   required_version = ">= 1.0"
-  required_providers {
-    aws = {
-      source  = "hashicorp/aws"
-      version = "~> 5.0"
-    }
-  }
 }
 
 provider "aws" {
@@ -189,97 +179,87 @@ provider "aws" {
 }
 
 variable "instance_type" {
-  description = "EC2 instance type"
-  type        = string
-  default     = "t3.micro"
+  type    = string
+  default = "t3.micro"
 }
 
 resource "aws_instance" "web" {
-  ami           = data.aws_ami.ubuntu.id
+  ami           = "ami-12345"
   instance_type = var.instance_type
-  
-  tags = {
-    Name = "web-server"
-  }
 }
 
 data "aws_ami" "ubuntu" {
   most_recent = true
-  owners      = ["099720109477"]
-  
-  filter {
-    name   = "name"
-    values = ["ubuntu/images/hvm-ssd/ubuntu-focal-20.04-amd64-server-*"]
-  }
 }
 ```
 
-### 出力結果
+**After** - Multiple organized files:
 
-分割後、以下のファイルが作成されます：
+`terraform.tf`:
+```hcl
+terraform {
+  required_version = ">= 1.0"
+}
+```
 
-- `terraform.tf` - terraform設定ブロック
-- `providers.tf` - providerブロック
-- `variables.tf` - variableブロック
-- `resource__aws_instance.tf` - aws_instanceリソース
-- `data__aws_ami.tf` - aws_amiデータソース
+`providers.tf`:
+```hcl
+provider "aws" {
+  region = "us-west-2"
+}
+```
 
-### プロジェクト整理の例
+`variables.tf`:
+```hcl
+variable "instance_type" {
+  type    = string
+  default = "t3.micro"
+}
+```
+
+`resource__aws_instance.tf`:
+```hcl
+resource "aws_instance" "web" {
+  ami           = "ami-12345"
+  instance_type = var.instance_type
+}
+```
+
+`data__aws_ami.tf`:
+```hcl
+data "aws_ami" "ubuntu" {
+  most_recent = true
+}
+```
+
+### Common Use Cases
 
 ```bash
-# 現在のプロジェクトをプレビュー
-tf-file-organize plan .
-# → ファイル分割の結果をプレビュー
+# Safe preview before making changes
+tf-file-organize plan ./terraform-files
 
-# バックアップ付きで実際に分割実行
-tf-file-organize run . --backup
-# → 元ファイルはbackup/に移動、整理されたファイルを作成
+# Organize with backup (recommended for first time)
+tf-file-organize run ./terraform-files --backup
 
-# 設定ファイル付きで整理
+# Organize entire project directory
+tf-file-organize run .
+
+# Use custom configuration
 tf-file-organize run . --config my-config.yaml
 ```
 
-### CI/CDでの活用
+## Idempotency and File Management
 
-```bash
-# 設定ファイルをプロジェクトに配置
-cat > tf-file-organize.yaml << 'EOF'
-groups:
-  - name: infrastructure
-    filename: infrastructure.tf
-    patterns: 
-      - aws_vpc
-      - aws_subnet*
-      - aws_security_group*
-  - name: compute
-    filename: compute.tf
-    patterns:
-      - aws_instance
-      - aws_launch_*
-      - aws_autoscaling_*
-exclude_files:
-  - "*temp*.tf"
-EOF
+This tool ensures idempotent operations and provides consistent results across multiple runs:
 
-# 設定の検証
-tf-file-organize validate-config tf-file-organize.yaml
+- **Default Behavior**: Source files are automatically removed after organization (to prevent duplication)
+- **Backup Option**: `--backup` flag saves original files to backup directory
+- **Smart Conflict Resolution**: Configuration-aware duplicate file detection and removal
 
-# 自動整理（設定ファイル自動検出）
-tf-file-organize run .
-```
+## Development & Contributing
 
-## 冪等性とファイル管理
+For development information, technical specifications, and contribution guidelines, see [DEVELOPMENT.md](DEVELOPMENT.md).
 
-このツールは冪等的な動作を保証し、複数回実行しても一貫した結果を提供します：
+## License
 
-- **デフォルト動作**: 整理後、元ファイルは自動削除（重複を防ぐため）
-- **バックアップオプション**: `--backup`フラグで元ファイルをbackupディレクトリに保存
-- **スマート競合解決**: 設定を考慮した重複ファイル検出と削除
-
-## 開発・貢献
-
-開発に関する詳細情報、技術仕様、貢献方法については [DEVELOPMENT.md](DEVELOPMENT.md) を参照してください。
-
-## ライセンス
-
-このプロジェクトは MIT ライセンスの下で公開されています。
+This project is released under the MIT License.

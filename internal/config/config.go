@@ -1,5 +1,4 @@
-// Package config provides configuration management for tf-file-organize,
-// including custom grouping rules, overrides, and exclusion patterns.
+// Package config provides configuration management for tf-file-organize.
 package config
 
 import (
@@ -12,20 +11,17 @@ import (
 	"github.com/goccy/go-yaml"
 )
 
-// Config represents the main configuration structure for file organization rules.
 type Config struct {
-	Groups       []GroupConfig `yaml:"groups"`        // カスタムグループ化ルール
-	ExcludeFiles []string      `yaml:"exclude_files"` // 除外ファイルパターン
+	Groups       []GroupConfig `yaml:"groups"`
+	ExcludeFiles []string      `yaml:"exclude_files"`
 }
 
-// GroupConfig defines a custom grouping rule for specific resource patterns.
 type GroupConfig struct {
-	Name     string   `yaml:"name"`     // グループ名
-	Filename string   `yaml:"filename"` // 出力ファイル名
-	Patterns []string `yaml:"patterns"` // マッチするパターンのリスト
+	Name     string   `yaml:"name"`
+	Filename string   `yaml:"filename"`
+	Patterns []string `yaml:"patterns"`
 }
 
-// LoadConfig loads and validates a configuration file from the specified path.
 func LoadConfig(configPath string) (*Config, error) {
 	if configPath == "" {
 		return &Config{}, nil
@@ -39,19 +35,16 @@ func LoadConfig(configPath string) (*Config, error) {
 		configPath = abs
 	}
 
-	// セキュリティチェック: ファイル情報を検証
 	stat, err := os.Stat(configPath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to access config file: %w", err)
 	}
 
-	// ファイルサイズ制限（DoS攻撃対策）
-	const maxConfigSize = 1024 * 1024 // 1MB
+	const maxConfigSize = 1024 * 1024 // 1MB limit to prevent DoS
 	if stat.Size() > maxConfigSize {
 		return nil, fmt.Errorf("config file too large (max %d bytes): %d bytes", maxConfigSize, stat.Size())
 	}
 
-	// 通常のファイルかチェック
 	if !stat.Mode().IsRegular() {
 		return nil, fmt.Errorf("config path must be a regular file: %s", configPath)
 	}
@@ -61,7 +54,6 @@ func LoadConfig(configPath string) (*Config, error) {
 		return nil, fmt.Errorf("failed to read config file: %w", err)
 	}
 
-	// 無効なフィールドの検出
 	if err := validateConfigFields(data); err != nil {
 		return nil, fmt.Errorf("invalid configuration fields: %w", err)
 	}
@@ -71,7 +63,6 @@ func LoadConfig(configPath string) (*Config, error) {
 		return nil, fmt.Errorf("failed to parse config file: %w", err)
 	}
 
-	// 設定内容の検証
 	if err := validateConfig(&config); err != nil {
 		return nil, fmt.Errorf("invalid configuration: %w", err)
 	}
@@ -79,9 +70,7 @@ func LoadConfig(configPath string) (*Config, error) {
 	return &config, nil
 }
 
-// ValidateConfig performs comprehensive validation of a configuration
 func ValidateConfig(cfg *Config) error {
-	// Check for duplicate group names
 	groupNames := make(map[string]bool)
 	for i, group := range cfg.Groups {
 		if groupNames[group.Name] {
@@ -90,7 +79,6 @@ func ValidateConfig(cfg *Config) error {
 		groupNames[group.Name] = true
 	}
 
-	// Check for duplicate filenames
 	filenames := make(map[string]string)
 	for i, group := range cfg.Groups {
 		if existingGroup, exists := filenames[group.Filename]; exists {
@@ -99,7 +87,6 @@ func ValidateConfig(cfg *Config) error {
 		filenames[group.Filename] = group.Name
 	}
 
-	// Check for pattern conflicts (same pattern in multiple groups)
 	patternGroups := make(map[string]string)
 	for _, group := range cfg.Groups {
 		for _, pattern := range group.Patterns {
@@ -115,7 +102,6 @@ func ValidateConfig(cfg *Config) error {
 		if pattern == "" {
 			return fmt.Errorf("exclude file pattern %d is empty", i+1)
 		}
-		// Test pattern validity by attempting to match against a test string
 		if !isValidPattern(pattern) {
 			return fmt.Errorf("exclude file pattern %d ('%s') contains invalid characters", i+1, pattern)
 		}
@@ -124,9 +110,7 @@ func ValidateConfig(cfg *Config) error {
 	return nil
 }
 
-// isValidPattern checks if a pattern is valid for file matching
 func isValidPattern(pattern string) bool {
-	// Check for basic invalid characters that could cause issues
 	invalidChars := []string{"\x00", "\n", "\r", "\t"}
 	for _, char := range invalidChars {
 		if strings.Contains(pattern, char) {
@@ -136,7 +120,6 @@ func isValidPattern(pattern string) bool {
 	return true
 }
 
-// validateConfig validates the loaded configuration for security and correctness
 func validateConfig(config *Config) error {
 	if err := validateGroups(config.Groups); err != nil {
 		return err
@@ -147,7 +130,6 @@ func validateConfig(config *Config) error {
 	return nil
 }
 
-// validateGroups validates group configurations
 func validateGroups(groups []GroupConfig) error {
 	for i, group := range groups {
 		if group.Name == "" {
@@ -173,7 +155,6 @@ func validateGroups(groups []GroupConfig) error {
 	return nil
 }
 
-// validatePatterns validates pattern configurations
 func validatePatterns(patterns []string, groupIndex int, groupName string) error {
 	for j, pattern := range patterns {
 		if pattern == "" {
@@ -186,7 +167,6 @@ func validatePatterns(patterns []string, groupIndex int, groupName string) error
 	return nil
 }
 
-// validateExcludeFilePatterns validates exclude file pattern configurations
 func validateExcludeFilePatterns(patterns []string) error {
 	for i, pattern := range patterns {
 		if pattern == "" {
@@ -199,13 +179,12 @@ func validateExcludeFilePatterns(patterns []string) error {
 	return nil
 }
 
-// validateFilename ensures filename is safe and doesn't contain dangerous characters
+// validateFilename ensures filename safety
 func validateFilename(filename string) error {
 	if filename == "" {
 		return fmt.Errorf("filename cannot be empty")
 	}
 
-	// 基本的な文字チェック
 	if strings.Contains(filename, "..") {
 		return fmt.Errorf("filename cannot contain '..'")
 	}
@@ -214,12 +193,10 @@ func validateFilename(filename string) error {
 		return fmt.Errorf("filename contains invalid characters")
 	}
 
-	// 長さ制限
 	if len(filename) > 255 {
 		return fmt.Errorf("filename too long (max 255 chars)")
 	}
 
-	// システムファイル名のチェック
 	systemNames := []string{"CON", "PRN", "AUX", "NUL", "COM1", "COM2", "COM3", "COM4",
 		"COM5", "COM6", "COM7", "COM8", "COM9", "LPT1", "LPT2",
 		"LPT3", "LPT4", "LPT5", "LPT6", "LPT7", "LPT8", "LPT9"}
@@ -269,11 +246,10 @@ func (c *Config) wildcardMatch(pattern, text string) bool {
 		return true
 	}
 
-	// filepath.Matchと同様のロジックを使用
 	return c.matchWithWildcards(pattern, text)
 }
 
-// matchWithWildcards は複数の*を含むパターンを処理
+// matchWithWildcards processes patterns with multiple wildcards
 func (c *Config) matchWithWildcards(pattern, text string) bool {
 	patternIndex := 0
 	textIndex := 0
@@ -297,7 +273,6 @@ func (c *Config) matchWithWildcards(pattern, text string) bool {
 		}
 	}
 
-	// パターンの残りの*を処理
 	for patternIndex < len(pattern) && pattern[patternIndex] == '*' {
 		patternIndex++
 	}
@@ -305,27 +280,22 @@ func (c *Config) matchWithWildcards(pattern, text string) bool {
 	return patternIndex == len(pattern)
 }
 
-// validateConfigFields は設定ファイル内の無効なフィールドを検出
 func validateConfigFields(data []byte) error {
-	// 生のYAMLを map[string]any にパース
 	var rawConfig map[string]any
 	if err := yaml.Unmarshal(data, &rawConfig); err != nil {
 		return fmt.Errorf("failed to parse YAML: %w", err)
 	}
 
-	// 有効なトップレベルフィールドを定義
 	validTopLevelFields := map[string]bool{
 		"groups":        true,
 		"exclude_files": true,
 	}
 
-	// 古い形式や無効なフィールドを検出
 	var invalidFields []string
 	var deprecatedFields []string
 
 	for field := range rawConfig {
 		if !validTopLevelFields[field] {
-			// 既知の古いフィールドかチェック
 			switch field {
 			case "exclude":
 				deprecatedFields = append(deprecatedFields, fmt.Sprintf("'%s' (use 'exclude_files' instead)", field))
@@ -337,7 +307,6 @@ func validateConfigFields(data []byte) error {
 		}
 	}
 
-	// グループ内の無効なフィールドも検証
 	if groupsInterface, exists := rawConfig["groups"]; exists {
 		if groups, ok := groupsInterface.([]any); ok {
 			validGroupFields := map[string]bool{
@@ -358,7 +327,6 @@ func validateConfigFields(data []byte) error {
 		}
 	}
 
-	// エラーメッセージの構築
 	var errorMessages []string
 
 	if len(deprecatedFields) > 0 {

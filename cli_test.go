@@ -1,4 +1,4 @@
-package main
+package main_test
 
 import (
 	"os"
@@ -9,7 +9,12 @@ import (
 	"time"
 )
 
-// createTestDir creates a test directory within the project's tmp folder
+const variableContent = `
+variable "region" {
+  type = string
+}
+`
+
 func createTestDir(t *testing.T, testName string) string {
 	tmpDir := filepath.Join("tmp", "cli-test", testName+"-"+t.Name()+"-"+time.Now().Format("20060102-150405"))
 	err := os.MkdirAll(tmpDir, 0755)
@@ -23,10 +28,8 @@ func createTestDir(t *testing.T, testName string) string {
 }
 
 func TestCLIBasicUsage(t *testing.T) {
-	// テスト用ディレクトリを作成
 	testDir := createTestDir(t, "basic")
 
-	// バイナリをビルド
 	binary := filepath.Join(testDir, "tf-file-organize")
 	cmd := exec.Command("go", "build", "-o", binary)
 	err := cmd.Run()
@@ -34,7 +37,6 @@ func TestCLIBasicUsage(t *testing.T) {
 		t.Fatalf("Failed to build binary: %v", err)
 	}
 
-	// テスト用ファイルを作成
 	inputFile := filepath.Join(testDir, "main.tf")
 	outputDir := filepath.Join(testDir, "split")
 
@@ -63,14 +65,12 @@ output "instance_id" {
 		t.Fatalf("Failed to create test file: %v", err)
 	}
 
-	// CLIを実行
 	cmd = exec.Command(binary, "run", inputFile, "--output-dir", outputDir)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		t.Fatalf("CLI execution failed: %v\nOutput: %s", err, output)
 	}
 
-	// 出力ファイルが作成されたことを確認
 	expectedFiles := []string{
 		"terraform.tf",
 		"variables.tf",
@@ -87,7 +87,6 @@ output "instance_id" {
 }
 
 func TestCLIPlan(t *testing.T) {
-	// テスト用ディレクトリを作成
 	testDir := createTestDir(t, "plan")
 
 	binary := filepath.Join(testDir, "tf-file-organize")
@@ -111,26 +110,22 @@ resource "aws_instance" "web" {
 		t.Fatalf("Failed to create test file: %v", err)
 	}
 
-	// planサブコマンドでCLIを実行
 	cmd = exec.Command(binary, "plan", inputFile, "--output-dir", outputDir)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		t.Fatalf("CLI execution failed: %v\nOutput: %s", err, output)
 	}
 
-	// "Would create file" メッセージが含まれることを確認
 	if !strings.Contains(string(output), "Would create file") {
 		t.Errorf("Expected plan output, got: %s", output)
 	}
 
-	// 実際のファイルは作成されていないことを確認
 	if _, err := os.Stat(outputDir); !os.IsNotExist(err) {
 		t.Errorf("Output directory should not exist in plan mode")
 	}
 }
 
 func TestCLIDirectoryInput(t *testing.T) {
-	// テスト用ディレクトリを作成
 	testDir := createTestDir(t, "directory")
 
 	binary := filepath.Join(testDir, "tf-file-organize")
@@ -148,14 +143,7 @@ func TestCLIDirectoryInput(t *testing.T) {
 		t.Fatalf("Failed to create input directory: %v", err)
 	}
 
-	// 複数のTerraformファイルを作成
-	const (
-		file1Content = `
-variable "region" {
-  type = string
-}
-`
-		file2Content = `
+	resourceContent := `
 resource "aws_instance" "web1" {
   ami = "ami-12345"
 }
@@ -164,32 +152,28 @@ resource "aws_instance" "web2" {
   ami = "ami-67890"
 }
 `
-	)
 
-	err = os.WriteFile(filepath.Join(inputDir, "variables.tf"), []byte(file1Content), 0644)
+	err = os.WriteFile(filepath.Join(inputDir, "variables.tf"), []byte(variableContent), 0644)
 	if err != nil {
 		t.Fatalf("Failed to create variables.tf: %v", err)
 	}
 
-	err = os.WriteFile(filepath.Join(inputDir, "instances.tf"), []byte(file2Content), 0644)
+	err = os.WriteFile(filepath.Join(inputDir, "instances.tf"), []byte(resourceContent), 0644)
 	if err != nil {
 		t.Fatalf("Failed to create instances.tf: %v", err)
 	}
 
-	// ディレクトリ入力でCLIを実行（非再帰的）
 	cmd = exec.Command(binary, "run", inputDir, "--output-dir", outputDir)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		t.Fatalf("CLI execution failed: %v\nOutput: %s", err, output)
 	}
 
-	// 複数のリソースが統合されたファイルが作成されることを確認
 	resourceFile := filepath.Join(outputDir, "resource__aws_instance.tf")
 	if _, statErr := os.Stat(resourceFile); os.IsNotExist(statErr) {
 		t.Errorf("Expected consolidated resource file was not created")
 	}
 
-	// ファイル内容確認（2つのaws_instanceリソースが含まれているはず）
 	content, err := os.ReadFile(resourceFile)
 	if err != nil {
 		t.Fatalf("Failed to read resource file: %v", err)
@@ -205,7 +189,6 @@ resource "aws_instance" "web2" {
 }
 
 func TestCLIRecursiveDirectoryInput(t *testing.T) {
-	// テスト用ディレクトリを作成
 	testDir := createTestDir(t, "recursive")
 
 	binary := filepath.Join(testDir, "tf-file-organize")
@@ -218,27 +201,18 @@ func TestCLIRecursiveDirectoryInput(t *testing.T) {
 	inputDir := filepath.Join(testDir, "terraform")
 	subDir := filepath.Join(inputDir, "modules", "compute")
 
-	// ディレクトリ構造を作成
 	err = os.MkdirAll(subDir, 0755)
 	if err != nil {
 		t.Fatalf("Failed to create subdirectory: %v", err)
 	}
 
-	// ルートディレクトリのファイル
-	const rootFileContent = `
-variable "region" {
-  type = string
-}
-`
-
-	// サブディレクトリのファイル
 	subFileContent := `
 resource "aws_instance" "sub_web" {
   ami = "ami-sub123"
 }
 `
 
-	err = os.WriteFile(filepath.Join(inputDir, "variables.tf"), []byte(rootFileContent), 0644)
+	err = os.WriteFile(filepath.Join(inputDir, "variables.tf"), []byte(variableContent), 0644)
 	if err != nil {
 		t.Fatalf("Failed to create root variables.tf: %v", err)
 	}
@@ -248,45 +222,38 @@ resource "aws_instance" "sub_web" {
 		t.Fatalf("Failed to create sub instances.tf: %v", err)
 	}
 
-	// 再帰的フラグなしでCLIを実行（inputDirに直接出力）
 	cmd = exec.Command(binary, "plan", inputDir)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		t.Fatalf("CLI execution failed: %v\nOutput: %s", err, output)
 	}
 
-	// サブディレクトリのファイルは処理されないはず（planなので出力メッセージで確認）
 	outputStr := string(output)
 	if strings.Contains(outputStr, "sub_web") {
 		t.Errorf("Sub-directory files should not be processed without recursive flag")
 	}
 
-	// variables.tfは処理されるはず
 	if !strings.Contains(outputStr, "variables.tf") {
 		t.Errorf("Variables file should be processed in root directory")
 	}
 
-	// 再帰的フラグありでCLIを実行
 	cmd = exec.Command(binary, "plan", inputDir, "--recursive")
 	output, err = cmd.CombinedOutput()
 	if err != nil {
 		t.Fatalf("CLI execution failed with recursive flag: %v\nOutput: %s", err, output)
 	}
 
-	// 今度はサブディレクトリのファイルも処理されるはず
 	outputStr = string(output)
 	if !strings.Contains(outputStr, "resource__aws_instance.tf") {
 		t.Errorf("Resource file should be created with recursive flag")
 	}
 
-	// サブディレクトリのファイルが処理されることを確認（Processedメッセージで確認）
 	if !strings.Contains(outputStr, "modules/compute/instances.tf") {
 		t.Errorf("Sub-directory file should be processed with recursive flag")
 	}
 }
 
 func TestCLIWithConfigFile(t *testing.T) {
-	// テスト用ディレクトリを作成
 	testDir := createTestDir(t, "config")
 
 	binary := filepath.Join(testDir, "tf-file-organize")
@@ -334,20 +301,17 @@ groups:
 		t.Fatalf("Failed to create config file: %v", err)
 	}
 
-	// 設定ファイルを指定してCLIを実行
 	cmd = exec.Command(binary, "run", inputFile, "--config", configFile, "--output-dir", outputDir)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		t.Fatalf("CLI execution failed: %v\nOutput: %s", err, output)
 	}
 
-	// 設定に従ったファイルが作成されることを確認
 	infraFile := filepath.Join(outputDir, "infrastructure.tf")
 	if _, statErr := os.Stat(infraFile); os.IsNotExist(statErr) {
 		t.Errorf("Expected infrastructure.tf was not created")
 	}
 
-	// ファイル内容確認（3つのリソースがすべて含まれているはず）
 	content, err := os.ReadFile(infraFile)
 	if err != nil {
 		t.Fatalf("Failed to read infrastructure file: %v", err)
@@ -366,7 +330,6 @@ groups:
 }
 
 func TestCLIAutoConfigDetection(t *testing.T) {
-	// テスト用ディレクトリを作成
 	testDir := createTestDir(t, "autoconfig")
 
 	binary := filepath.Join(testDir, "tf-file-organize")
@@ -404,8 +367,6 @@ groups:
 		t.Fatalf("Failed to create config file: %v", err)
 	}
 
-	// 設定ファイルを明示的に指定せずにCLIを実行（自動検出をテスト）
-	// 絶対パスを使用
 	absInputFile, err := filepath.Abs(inputFile)
 	if err != nil {
 		t.Fatalf("Failed to get absolute path for input file: %v", err)
@@ -421,18 +382,16 @@ groups:
 	}
 
 	cmd = exec.Command(absBinary, "run", absInputFile, "--output-dir", absOutputDir)
-	cmd.Dir = testDir // 作業ディレクトリを設定
+	cmd.Dir = testDir
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		t.Fatalf("CLI execution failed: %v\nOutput: %s", err, output)
 	}
 
-	// 設定ファイルが自動検出されたことを確認
 	if !strings.Contains(string(output), "Loading configuration from") {
 		t.Errorf("Expected config auto-detection message, got: %s", output)
 	}
 
-	// カスタムファイル名が使用されたことを確認
 	customVarsFile := filepath.Join(outputDir, "custom-vars.tf")
 	if _, err := os.Stat(customVarsFile); os.IsNotExist(err) {
 		t.Errorf("Expected custom-vars.tf was not created")
@@ -440,7 +399,6 @@ groups:
 }
 
 func TestCLIErrorHandling(t *testing.T) {
-	// テスト用ディレクトリを作成
 	testDir := createTestDir(t, "error")
 
 	binary := filepath.Join(testDir, "tf-file-organize")
@@ -450,7 +408,6 @@ func TestCLIErrorHandling(t *testing.T) {
 		t.Fatalf("Failed to build binary: %v", err)
 	}
 
-	// 存在しないファイルを指定（プロジェクト内の存在しないパス）
 	nonexistentFile := filepath.Join(testDir, "nonexistent", "file.tf")
 	cmd = exec.Command(binary, "run", nonexistentFile)
 	output, err := cmd.CombinedOutput()
@@ -462,14 +419,12 @@ func TestCLIErrorHandling(t *testing.T) {
 		t.Errorf("Expected 'does not exist' error message, got: %s", output)
 	}
 
-	// 引数なしで実行（runサブコマンドのみ）
 	cmd = exec.Command(binary, "run")
 	_, err = cmd.CombinedOutput()
 	if err == nil {
 		t.Errorf("Expected error for missing arguments, got none")
 	}
 
-	// 無効な設定ファイルを指定
 	inputFile := filepath.Join(testDir, "main.tf")
 	invalidConfigFile := filepath.Join(testDir, "invalid.yaml")
 
@@ -495,7 +450,6 @@ func TestCLIErrorHandling(t *testing.T) {
 }
 
 func TestCLIIncompatibleFlags(t *testing.T) {
-	// テスト用ディレクトリを作成
 	testDir := createTestDir(t, "incompatible")
 
 	binary := filepath.Join(testDir, "tf-file-organize")
@@ -508,7 +462,6 @@ func TestCLIIncompatibleFlags(t *testing.T) {
 	inputDir := filepath.Join(testDir, "terraform")
 	outputDir := filepath.Join(testDir, "output")
 
-	// テスト用ディレクトリとファイルを作成
 	err = os.MkdirAll(inputDir, 0755)
 	if err != nil {
 		t.Fatalf("Failed to create input directory: %v", err)
@@ -524,7 +477,6 @@ variable "test" {
 		t.Fatalf("Failed to create test file: %v", err)
 	}
 
-	// -o と -r を同時に指定してエラーになることを確認
 	cmd = exec.Command(binary, "run", inputDir, "--output-dir", outputDir, "--recursive")
 	output, err := cmd.CombinedOutput()
 	if err == nil {

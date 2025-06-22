@@ -36,16 +36,16 @@ func parseHCLBlock(t *testing.T, content string) *types.Block {
 		},
 	}
 
-	content_hcl, _, diags := file.Body.PartialContent(schema)
+	contentHCL, _, diags := file.Body.PartialContent(schema)
 	if diags.HasErrors() {
 		t.Fatalf("Failed to extract content: %v", diags)
 	}
 
-	if len(content_hcl.Blocks) == 0 {
+	if len(contentHCL.Blocks) == 0 {
 		t.Fatal("No blocks found in test content")
 	}
 
-	block := content_hcl.Blocks[0]
+	block := contentHCL.Blocks[0]
 	return &types.Block{
 		Type:   block.Type,
 		Labels: block.Labels,
@@ -55,9 +55,8 @@ func parseHCLBlock(t *testing.T, content string) *types.Block {
 
 func TestWriteGroupsDryRun(t *testing.T) {
 	tmpDir := t.TempDir()
-	w := writer.New(tmpDir, true) // dry run = true
+	w := writer.New(tmpDir, true)
 
-	// テスト用のブロックグループを作成
 	block := parseHCLBlock(t, `
 resource "aws_instance" "web" {
   ami           = "ami-12345"
@@ -74,7 +73,6 @@ resource "aws_instance" "web" {
 		t.Fatalf("WriteGroups failed: %v", err)
 	}
 
-	// dry runなので実際のファイルは作成されていないはず
 	files, err := os.ReadDir(tmpDir)
 	if err != nil {
 		t.Fatalf("Failed to read directory: %v", err)
@@ -87,9 +85,8 @@ resource "aws_instance" "web" {
 
 func TestWriteGroupsActual(t *testing.T) {
 	tmpDir := t.TempDir()
-	w := writer.New(tmpDir, false) // dry run = false
+	w := writer.New(tmpDir, false)
 
-	// シンプルなvariableブロック
 	variableBlock := parseHCLBlock(t, `
 variable "instance_type" {
   description = "EC2 instance type"
@@ -98,7 +95,6 @@ variable "instance_type" {
 }
 `)
 
-	// シンプルなresourceブロック
 	resourceBlock := parseHCLBlock(t, `
 resource "aws_instance" "web" {
   ami           = "ami-12345"
@@ -116,7 +112,6 @@ resource "aws_instance" "web" {
 		t.Fatalf("WriteGroups failed: %v", err)
 	}
 
-	// ファイルが作成されたことを確認
 	files, err := os.ReadDir(tmpDir)
 	if err != nil {
 		t.Fatalf("Failed to read directory: %v", err)
@@ -126,7 +121,6 @@ resource "aws_instance" "web" {
 		t.Errorf("Expected 2 files, got %d", len(files))
 	}
 
-	// variables.tf の内容確認
 	variablesPath := filepath.Join(tmpDir, "variables.tf")
 	variablesContent, err := os.ReadFile(variablesPath)
 	if err != nil {
@@ -138,7 +132,6 @@ resource "aws_instance" "web" {
 		t.Errorf("variables.tf does not contain expected variable block")
 	}
 
-	// resource__aws_instance.tf の内容確認
 	resourcePath := filepath.Join(tmpDir, "resource__aws_instance.tf")
 	resourceContent, err := os.ReadFile(resourcePath)
 	if err != nil {
@@ -155,7 +148,6 @@ func TestWriteGroupsMultipleBlocks(t *testing.T) {
 	tmpDir := t.TempDir()
 	w := writer.New(tmpDir, false)
 
-	// 複数のvariableブロック
 	variable1 := parseHCLBlock(t, `
 variable "instance_type" {
   description = "EC2 instance type"
@@ -180,7 +172,6 @@ variable "key_name" {
 		t.Fatalf("WriteGroups failed: %v", err)
 	}
 
-	// ファイル内容の確認
 	variablesPath := filepath.Join(tmpDir, "variables.tf")
 	content, err := os.ReadFile(variablesPath)
 	if err != nil {
@@ -195,7 +186,6 @@ variable "key_name" {
 		t.Errorf("variables.tf does not contain key_name variable")
 	}
 
-	// 両方のブロックが含まれていることを確認
 	variableCount := strings.Count(contentStr, "variable ")
 	if variableCount != 2 {
 		t.Errorf("Expected 2 variable blocks, found %d", variableCount)
@@ -222,12 +212,10 @@ output "instance_id" {
 		t.Fatalf("WriteGroups failed: %v", err)
 	}
 
-	// カスタム出力ディレクトリが作成されたことを確認
 	if _, err := os.Stat(outputDir); os.IsNotExist(err) {
 		t.Errorf("Output directory was not created: %s", outputDir)
 	}
 
-	// ファイルが正しい場所に作成されたことを確認
 	outputPath := filepath.Join(outputDir, "outputs.tf")
 	if _, err := os.Stat(outputPath); os.IsNotExist(err) {
 		t.Errorf("Output file was not created: %s", outputPath)
@@ -240,12 +228,9 @@ func TestNewWriter(t *testing.T) {
 
 	w := writer.New(outputDir, dryRun)
 
-	// プライベートフィールドの直接テストはできないため、動作確認を行う
 	if w == nil {
 		t.Error("Expected writer instance, got nil")
 	}
-
-	// ファイル作成の動作テストでプロパティを間接的に確認
 	tmpDir := t.TempDir()
 	testWriter := writer.New(tmpDir, false)
 

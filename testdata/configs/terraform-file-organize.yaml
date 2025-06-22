@@ -1,24 +1,24 @@
-# tf-file-organize 設定ファイル
-# リソースタイプのマッチングパターンとファイル名を定義
+# tf-file-organize configuration file
+# Define matching patterns for resource types and file names
 #
-# パターンマッチングの优先度（上から順にチェック）：
-# 1. block_type.sub_type.name  例: "output.vpc_id.main", "resource.aws_instance.web"
-# 2. block_type.sub_type       例: "output.vpc_id", "resource.aws_instance"
-# 3. sub_type                  例: "vpc_id", "aws_instance"
-# 4. block_type                例: "output", "resource"
+# Pattern matching priority (checked in order from top to bottom):
+# 1. block_type.sub_type.name  Example: "output.vpc_id.main", "resource.aws_instance.web"
+# 2. block_type.sub_type       Example: "output.vpc_id", "resource.aws_instance"
+# 3. sub_type                  Example: "vpc_id", "aws_instance"
+# 4. block_type                Example: "output", "resource"
 #
-# ワイルドカードサポート：
-# - "*"      : 任意の文字列
-# - "vpc_*"  : "vpc_"で始まるもの
-# - "*_ip"   : "_ip"で終わるもの
-# - "web*db" : "web"で始まり"db"で終わるもの
+# Wildcard support:
+# - "*"      : Any string
+# - "vpc_*"  : Starts with "vpc_"
+# - "*_ip"   : Ends with "_ip"
+# - "web*db" : Starts with "web" and ends with "db"
 #
-# exclude_files：ファイル名パターンでグループ化を除外
-# - グループ化されたファイルがこのパターンにマッチする場合、個別ファイルとして保持
+# exclude_files: Exclude grouping by file name patterns
+# - If grouped files match this pattern, they are kept as individual files
 
-# グループ設定
+# Group settings
 groups:
-  # AWSネットワーク関連をまとめる
+  # Group AWS network related resources
   - name: "network"
     filename: "network.tf"
     patterns:
@@ -29,7 +29,7 @@ groups:
       - "aws_nat_gateway"
       - "aws_security_group*"
 
-  # AWSコンピュート関連をまとめる
+  # Group AWS compute related resources
   - name: "compute"
     filename: "compute.tf"
     patterns:
@@ -39,54 +39,54 @@ groups:
       - "aws_elb*"
       - "aws_lb*"
 
-  # AWS RDS関連をまとめる
+  # Group AWS RDS related resources
   - name: "database"
     filename: "database.tf"
     patterns:
       - "aws_db_*"
       - "aws_rds_*"
 
-  # S3関連をまとめる
+  # Group S3 related resources
   - name: "storage"
     filename: "storage.tf"
     patterns:
       - "aws_s3_*"
-      - "resource.aws_s3_*"       # 明示的にresourceブロック指定
+      - "resource.aws_s3_*"       # Explicitly specify resource block
   
-  # 特定のリソース名で細かく分ける例
+  # Example of detailed grouping by specific resource names
   - name: "web_infrastructure"
     filename: "web-infra.tf"
     patterns:
-      - "resource.aws_instance.web*"     # webで始まるインスタンス
-      - "resource.aws_lb.web*"           # webで始まるロードバランサー
-      - "resource.aws_security_group.web" # 特定のwebセキュリティグループ
+      - "resource.aws_instance.web*"     # Instances starting with web
+      - "resource.aws_lb.web*"           # Load balancers starting with web
+      - "resource.aws_security_group.web" # Specific web security group
 
-  # 変数、出力、ローカル値のカスタムファイル名
+  # Custom file names for variables, outputs, and local values
   - name: "variables"
     filename: "vars.tf"
     patterns:
       - "variable"
   
-  # debug関連出力（これは除外されるファイル名になる）
+  # Debug-related outputs (this will become an excluded file name)
   - name: "debug_outputs"
     filename: "debug-outputs.tf"
     patterns:
-      - "output.debug_*"     # debugで始まる出力
+      - "output.debug_*"     # Outputs starting with debug
   
-  # 通常の出力
+  # Regular outputs
   - name: "outputs"
     filename: "outputs.tf"
     patterns:
-      - "output"              # 基本的なoutputパターン
+      - "output"              # Basic output pattern
   
   - name: "locals"
     filename: "common.tf"
     patterns:
       - "locals"
 
-# 除外ファイル（これらのファイル名にマッチするものはグループ化しない）
+# Excluded files (files matching these names will not be grouped)
 exclude_files:
-  - "*special*"           # specialを含むファイルは個別のまま
-  - "debug-*.tf"          # debug-で始まるファイルは個別のまま
-  - "secret*.tf"          # secretで始まるファイルは個別のまま
-  - "tmp-*.tf"            # 一時ファイルは個別のまま
+  - "*special*"           # Files containing "special" remain individual
+  - "debug-*.tf"          # Files starting with "debug-" remain individual
+  - "secret*.tf"          # Files starting with "secret" remain individual
+  - "tmp-*.tf"            # Temporary files remain individual

@@ -1,4 +1,4 @@
-# case1: デフォルト設定（configなし）でのテスト用
-# 空の設定ファイル - デフォルトの分割動作をテストするため
+# case1: Test with default settings (no config)
+# Empty configuration file - to test default splitting behavior
 groups: []
 exclude_files: []

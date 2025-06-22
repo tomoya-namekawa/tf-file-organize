@@ -1,4 +1,4 @@
-package main
+package main_test
 
 import (
 	"os"
@@ -8,12 +8,9 @@ import (
 	"testing"
 )
 
-// TestIdempotency tests that running the tool multiple times produces consistent results
 func TestIdempotency(t *testing.T) {
-	// テスト用ディレクトリを作成
 	testDir := createTestDir(t, "idempotency")
 
-	// バイナリをビルド
 	binary := filepath.Join(testDir, "tf-file-organize")
 	cmd := exec.Command("go", "build", "-o", binary)
 	err := cmd.Run()
@@ -21,7 +18,6 @@ func TestIdempotency(t *testing.T) {
 		t.Fatalf("Failed to build binary: %v", err)
 	}
 
-	// テスト用ファイルを作成
 	inputFile := filepath.Join(testDir, "main.tf")
 	const tfContent = `
 terraform {
@@ -48,69 +44,58 @@ output "instance_id" {
 		t.Fatalf("Failed to create test file: %v", err)
 	}
 
-	// 1回目の実行
 	cmd = exec.Command(binary, "run", testDir)
 	output1, err := cmd.CombinedOutput()
 	if err != nil {
 		t.Fatalf("First execution failed: %v\nOutput: %s", err, output1)
 	}
 
-	// 作成されたファイルリストを取得
 	files1, err := getCreatedFiles(testDir)
 	if err != nil {
 		t.Fatalf("Failed to get files after first run: %v", err)
 	}
 
-	// 各ファイルの内容を取得
 	contents1, err := getFileContents(files1)
 	if err != nil {
 		t.Fatalf("Failed to read file contents after first run: %v", err)
 	}
 
-	// 2回目の実行
 	cmd = exec.Command(binary, "run", testDir)
 	output2, err := cmd.CombinedOutput()
 	if err != nil {
 		t.Fatalf("Second execution failed: %v\nOutput: %s", err, output2)
 	}
 
-	// 作成されたファイルリストを取得
 	files2, err := getCreatedFiles(testDir)
 	if err != nil {
 		t.Fatalf("Failed to get files after second run: %v", err)
 	}
 
-	// 各ファイルの内容を取得
 	contents2, err := getFileContents(files2)
 	if err != nil {
 		t.Fatalf("Failed to read file contents after second run: %v", err)
 	}
 
-	// 3回目の実行
 	cmd = exec.Command(binary, "run", testDir)
 	output3, err := cmd.CombinedOutput()
 	if err != nil {
 		t.Fatalf("Third execution failed: %v\nOutput: %s", err, output3)
 	}
 
-	// 作成されたファイルリストを取得
 	files3, err := getCreatedFiles(testDir)
 	if err != nil {
 		t.Fatalf("Failed to get files after third run: %v", err)
 	}
 
-	// 各ファイルの内容を取得
 	contents3, err := getFileContents(files3)
 	if err != nil {
 		t.Fatalf("Failed to read file contents after third run: %v", err)
 	}
 
-	// 冪等性チェック: ファイル数が同じであること
 	if len(files1) != len(files2) || len(files2) != len(files3) {
 		t.Errorf("File count differs between runs: %d, %d, %d", len(files1), len(files2), len(files3))
 	}
 
-	// 冪等性チェック: ファイル名が同じであること
 	if !compareFileLists(files1, files2) || !compareFileLists(files2, files3) {
 		t.Errorf("File lists differ between runs")
 		t.Logf("Run 1 files: %v", files1)
@@ -118,19 +103,15 @@ output "instance_id" {
 		t.Logf("Run 3 files: %v", files3)
 	}
 
-	// 冪等性チェック: ファイル内容が同じであること
 	if !compareFileContents(contents1, contents2) || !compareFileContents(contents2, contents3) {
 		t.Errorf("File contents differ between runs")
 		logContentDifferences(t, contents1, contents2, contents3)
 	}
 }
 
-// TestIdempotencyWithConfig tests idempotency with custom configuration
 func TestIdempotencyWithConfig(t *testing.T) {
-	// テスト用ディレクトリを作成
 	testDir := createTestDir(t, "idempotency-config")
 
-	// バイナリをビルド
 	binary := filepath.Join(testDir, "tf-file-organize")
 	cmd := exec.Command("go", "build", "-o", binary)
 	err := cmd.Run()
@@ -138,7 +119,6 @@ func TestIdempotencyWithConfig(t *testing.T) {
 		t.Fatalf("Failed to build binary: %v", err)
 	}
 
-	// テスト用ファイルを作成
 	inputFile := filepath.Join(testDir, "main.tf")
 	const tfConfigContent = `
 terraform {
@@ -172,7 +152,6 @@ output "service_url" {
 		t.Fatalf("Failed to create test file: %v", err)
 	}
 
-	// 設定ファイルを作成
 	configFile := filepath.Join(testDir, "tf-file-organize.yaml")
 	configContent := `
 groups:
@@ -194,7 +173,6 @@ exclude_files:
 		t.Fatalf("Failed to create config file: %v", err)
 	}
 
-	// 複数回実行して冪等性をテスト
 	var allFiles [][]string
 	var allContents []map[string]string
 
@@ -219,7 +197,6 @@ exclude_files:
 		allContents = append(allContents, contents)
 	}
 
-	// 冪等性チェック
 	for i := 1; i < len(allFiles); i++ {
 		if !compareFileLists(allFiles[0], allFiles[i]) {
 			t.Errorf("File lists differ between run 1 and run %d", i+1)
@@ -234,7 +211,6 @@ exclude_files:
 	}
 }
 
-// getCreatedFiles returns a sorted list of .tf files in the directory (excluding config files)
 func getCreatedFiles(dir string) ([]string, error) {
 	entries, err := os.ReadDir(dir)
 	if err != nil {
@@ -245,16 +221,13 @@ func getCreatedFiles(dir string) ([]string, error) {
 	for _, entry := range entries {
 		if !entry.IsDir() && strings.HasSuffix(entry.Name(), ".tf") &&
 			entry.Name() != "tf-file-organize.yaml" {
-			// フルパスで返す
 			files = append(files, filepath.Join(dir, entry.Name()))
 		}
 	}
 
-	// ソートして順序を安定させる
 	return files, nil
 }
 
-// getFileContents reads the contents of all specified files
 func getFileContents(files []string) (map[string]string, error) {
 	contents := make(map[string]string)
 
@@ -269,19 +242,16 @@ func getFileContents(files []string) (map[string]string, error) {
 	return contents, nil
 }
 
-// compareFileLists compares two file lists for equality
 func compareFileLists(files1, files2 []string) bool {
 	if len(files1) != len(files2) {
 		return false
 	}
 
-	// ソートして比較
 	sorted1 := make([]string, len(files1))
 	sorted2 := make([]string, len(files2))
 	copy(sorted1, files1)
 	copy(sorted2, files2)
 
-	// 簡単なソート
 	for i := range len(sorted1) {
 		for j := i + 1; j < len(sorted1); j++ {
 			if sorted1[i] > sorted1[j] {
@@ -306,7 +276,6 @@ func compareFileLists(files1, files2 []string) bool {
 	return true
 }
 
-// compareFileContents compares two content maps for equality
 func compareFileContents(contents1, contents2 map[string]string) bool {
 	if len(contents1) != len(contents2) {
 		return false
@@ -318,7 +287,6 @@ func compareFileContents(contents1, contents2 map[string]string) bool {
 			return false
 		}
 
-		// コンテンツを正規化して比較（空白の違いを無視）
 		normalized1 := strings.TrimSpace(content1)
 		normalized2 := strings.TrimSpace(content2)
 
@@ -330,7 +298,6 @@ func compareFileContents(contents1, contents2 map[string]string) bool {
 	return true
 }
 
-// logContentDifferences logs differences between file contents
 func logContentDifferences(t *testing.T, contents1, contents2, contents3 map[string]string) {
 	for filename := range contents1 {
 		content1 := contents1[filename]
@@ -341,7 +308,6 @@ func logContentDifferences(t *testing.T, contents1, contents2, contents3 map[str
 			t.Logf("Run 1 length: %d", len(content1))
 			t.Logf("Run 2 length: %d", len(content2))
 
-			// 内容の最初の部分を表示
 			if len(content1) > 200 {
 				t.Logf("Run 1 preview: %s...", content1[:200])
 			} else {

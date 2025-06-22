@@ -1,234 +1,234 @@
-# 開発ガイド
+# Development Guide
 
-tf-file-organizeの開発に関する詳細なガイドです。
+Detailed development guide for tf-file-organize.
 
-## 開発環境のセットアップ
+## Development Environment Setup
 
-### ツール管理
+### Tool Management
 
-このプロジェクトは[mise](https://mise.jdx.dev/)を使用して開発ツールを統一管理しています。
+This project uses [mise](https://mise.jdx.dev/) for unified tool management.
 
 ```bash
-# miseをインストール（初回のみ）
+# Install mise (first time only)
 curl https://mise.run | sh
 
-# プロジェクトの依存ツールをインストール
+# Install project dependencies
 mise install
 
-# ツールバージョンの確認
+# Check tool versions
 mise list
 ```
 
-### 初期セットアップ
+### Initial Setup
 
 ```bash
-# リポジトリのクローン
+# Clone repository
 git clone https://github.com/tomoya-namekawa/tf-file-organize.git
 cd tf-file-organize
 
-# 依存関係のインストール
+# Install dependencies
 go mod tidy
 
-# ビルド
+# Build
 go build -o tf-file-organize
 ```
 
-## 開発コマンド
+## Development Commands
 
-### ビルドとテスト
+### Build and Test
 
 ```bash
-# プロジェクトビルド
+# Project build
 go build -o tf-file-organize
 
-# 全テストの実行
+# Run all tests
 go test -v -coverprofile=coverage.out ./...
 go tool cover -func=coverage.out
 
-# 重要：ゴールデンファイルテスト（回帰検出）
+# Important: Golden file tests (regression detection)
 go test -run TestGoldenFiles -v
 
-# CLI機能テスト（全サブコマンド）
+# CLI functionality tests (all subcommands)
 go test -run TestCLI -v
 
-# パッケージ別テスト
+# Package-specific tests
 go test ./internal/config -v
 go test ./internal/parser -v
 go test ./internal/splitter -v
 go test ./internal/writer -v
 go test ./internal/usecase -v
 
-# カバレッジ目標: 60%以上
+# Coverage goal: 60% or higher
 go test -v -coverprofile=coverage.out ./...
 go tool cover -func=coverage.out
 ```
 
-### コード品質チェック
+### Code Quality Checks
 
 ```bash
 # Linting
 golangci-lint run
 
-# フォーマット
+# Format
 go mod tidy
 
-# ワークフロー検証
+# Workflow validation
 actionlint
 ```
 
-### 開発時のテスト実行
+### Development Testing
 
 ```bash
-# プレビューモード
+# Preview mode
 ./tf-file-organize plan testdata/terraform/sample.tf
 
-# ディレクトリ処理
+# Directory processing
 ./tf-file-organize plan testdata/terraform
 
-# 設定ファイル付きテスト
+# Test with config file
 ./tf-file-organize plan testdata/terraform --config testdata/configs/tf-file-organize.yaml
 
-# 設定ファイル検証
+# Configuration file validation
 ./tf-file-organize validate-config testdata/configs/tf-file-organize.yaml
 ```
 
-## アーキテクチャ
+## Architecture
 
-### コード構造
+### Code Structure
 
-本ツールはクリーンアーキテクチャの原則に従って設計されており、以下のレイヤーで構成されています：
+This tool is designed following clean architecture principles with the following layers:
 
-- **CLI層** (`cmd/`): サブコマンド定義と引数解析
-- **ユースケース層** (`internal/usecase/`): ビジネスロジックの調整とセキュリティ検証
-- **ドメイン層** (`internal/`): コア機能（パーサー、スプリッター、ライター、設定）
-- **データ層** (`pkg/types/`): データ構造の定義
+- **CLI Layer** (`cmd/`): Subcommand definitions and argument parsing
+- **Usecase Layer** (`internal/usecase/`): Business logic orchestration and security validation
+- **Domain Layer** (`internal/`): Core functionality (parser, splitter, writer, config)
+- **Data Layer** (`pkg/types/`): Data structure definitions
 
-### サブコマンド構造
+### Subcommand Structure
 
-- `run <input-path>`: ファイル整理の実行
-- `plan <input-path>`: プレビューモード（旧 --dry-run）
-- `validate-config <config-file>`: 設定ファイル検証
-- `version`: バージョン情報表示
+- `run <input-path>`: Execute file organization
+- `plan <input-path>`: Preview mode (formerly --dry-run)
+- `validate-config <config-file>`: Configuration file validation
+- `version`: Show version information
 
-## 開発時の重要な原則
+## Important Development Principles
 
-### 1. 冪等性の維持
+### 1. Maintain Idempotency
 
-ツールは複数回実行しても一貫した結果を保証する必要があります：
+The tool must guarantee consistent results across multiple runs:
 
-- **デフォルト動作**: ソースファイルを削除して重複を防止
-- **バックアップオプション**: `--backup`でソースファイルを'backup'ディレクトリに移動
-- **スマート競合解決**: 設定ルールを考慮したファイル削除ロジック
+- **Default Behavior**: Remove source files to prevent duplication
+- **Backup Option**: `--backup` moves source files to 'backup' directory
+- **Smart Conflict Resolution**: File removal logic considering configuration rules
 
-### 2. 決定的出力の維持
+### 2. Maintain Deterministic Output
 
-CI/CDやバージョン管理との互換性を確保するため、出力は常に決定的である必要があります：
+Output must always be deterministic for CI/CD and version control compatibility:
 
-- **リソースの並び順**: グループ内でアルファベット順にソート
-- **属性の並び順**: HCL属性をアルファベット順にソート
-- **ファイル名の並び順**: 出力ファイル名をアルファベット順にソート
+- **Resource Ordering**: Sort alphabetically within groups
+- **Attribute Ordering**: Sort HCL attributes alphabetically
+- **Filename Ordering**: Sort output filenames alphabetically
 
-### 3. コメント保持
+### 3. Comment Preservation
 
-ブロック内コメントは常に保持される必要があります：
+Block-level comments must always be preserved:
 
-- **デュアルパースィング**: 標準HCL + `hclsyntax`パーシング
-- **RawBody抽出**: コメントを含む元ソース抽出
-- **Raw Block再構築**: 元コンテンツでの出力
+- **Dual Parsing**: Standard HCL + `hclsyntax` parsing
+- **RawBody Extraction**: Extract original source including comments
+- **Raw Block Reconstruction**: Output with original content
 
-### 4. セキュリティファースト
+### 4. Security First
 
-- すべてのファイルパス操作は `filepath.Clean` と `filepath.Base` を使用
-- 入力値の検証をusecase層で実装
-- パストラバーサル攻撃対策を徹底
+- All file path operations use `filepath.Clean` and `filepath.Base`
+- Input validation implemented in usecase layer
+- Thorough path traversal attack prevention
 
-### 5. パターンマッチング
+### 5. Pattern Matching
 
-複雑なパターンマッチングシステムをサポート：
+Support complex pattern matching system:
 
-- **シンプルパターン**: `aws_s3_*`
-- **サブタイプパターン**: `resource.aws_instance.web*`
-- **ブロックタイプパターン**: `variable`, `output.debug_*`
-- **複数ワイルドカード**: `*special*`
+- **Simple Patterns**: `aws_s3_*`
+- **Sub-type Patterns**: `resource.aws_instance.web*`
+- **Block Type Patterns**: `variable`, `output.debug_*`
+- **Multiple Wildcards**: `*special*`
 
-## テスト戦略
+## Testing Strategy
 
-### テスト構造
+### Test Structure
 
-- **単体テスト**: 全ての `internal/` パッケージに対応、別テストパッケージ使用
-- **CLIテスト** (`cli_test.go`): バイナリ実行による機能テスト
-- **ゴールデンファイルテスト** (`golden_test.go`): **最重要** - 回帰検出
+- **Unit Tests**: All `internal/` packages covered, using separate test packages
+- **CLI Tests** (`cli_test.go`): Functionality testing via binary execution
+- **Golden File Tests** (`golden_test.go`): **Most Important** - Regression detection
 
-### テストデータ構造
+### Test Data Structure
 
 ```
 testdata/
-├── terraform/          # 基本的なサンプルファイル
-├── configs/            # 設定ファイルの例
-└── integration/        # ゴールデンファイルテストケース
-    ├── case1/          # 基本ブロック（デフォルト設定）
-    ├── case2/          # 複数ファイルの基本グループ化
-    ├── case3/          # 設定ファイルによるカスタムグループ化
-    ├── case4/          # 複雑なマルチクラウド構成（25ブロック）
-    └── case5/          # テンプレート式とネストブロック
+├── terraform/          # Basic sample files
+├── configs/            # Configuration file examples
+└── integration/        # Golden file test cases
+    ├── case1/          # Basic blocks (default config)
+    ├── case2/          # Multiple files basic grouping
+    ├── case3/          # Custom grouping with config file
+    ├── case4/          # Complex multi-cloud setup (25 blocks)
+    └── case5/          # Template expressions and nested blocks
 ```
 
-### ゴールデンファイルテスト
+### Golden File Tests
 
-**最も重要なテスト**です。出力変更時は期待値ファイルの更新が必要：
+**Most important tests**. Expected value files must be updated when output changes:
 
 ```bash
-# ゴールデンファイルテストの実行
+# Run golden file tests
 go test -run TestGoldenFiles -v
 
-# 期待値ファイルの更新（出力形式変更時）
+# Update expected files (when output format changes)
 cp tmp/integration-test/case*/* testdata/integration/case*/expected/
 ```
 
-## 開発ワークフロー
+## Development Workflow
 
-### プレコミットチェックリスト
+### Pre-commit Checklist
 
 ```bash
-# 1. フォーマットとLint
+# 1. Format and lint
 golangci-lint run
 
-# 2. カバレッジ付きテスト
+# 2. Test with coverage
 go test -v -coverprofile=coverage.out ./...
 
-# 3. ゴールデンファイル検証
+# 3. Golden file verification
 go test -run TestGoldenFiles -v
 
-# 4. ビルドと統合テスト
+# 4. Build and integration test
 go build -o tf-file-organize
 ./tf-file-organize plan testdata/terraform/sample.tf
 
-# 5. ワークフロー検証
+# 5. Workflow validation
 actionlint
 ```
 
-### 出力変更時の注意点
+### Output Change Considerations
 
-出力形式を変更した場合：
+When changing output format:
 
-1. **ゴールデンファイルの期待値を更新**
-2. **決定的出力が維持されているか確認**
-3. **コメント保持機能が正常に動作するか確認**
+1. **Update golden file expected values**
+2. **Verify deterministic output is maintained**
+3. **Verify comment preservation functionality works correctly**
 
-## CI/CD設定
+## CI/CD Configuration
 
 ### GitHub Actions
 
 - **Main CI Pipeline** (`.github/workflows/ci.yml`): test, lint, build with security scanning
 - **Workflow Lint Pipeline** (`.github/workflows/workflow-lint.yml`): actionlint and pinact checks
 
-### セキュリティ機能
+### Security Features
 
-- GitHub Actionsのコミットハッシュ固定
-- gosecセキュリティスキャン統合
-- パストラバーサル攻撃対策
+- GitHub Actions commit hash pinning
+- gosec security scanning integration
+- Path traversal attack protection
 
-### Tool Versions (mise管理)
+### Tool Versions (mise managed)
 
 ```toml
 [tools]
@@ -239,118 +239,118 @@ pinact = "latest"
 "npm:@goreleaser/goreleaser" = "latest"
 ```
 
-## リリースプロセス
+## Release Process
 
-### Conventional Commitsによる自動リリース
+### Automated Release with Conventional Commits
 
-このプロジェクトはConventional Commitsとrelease-pleaseによる自動リリースを採用しています。
+This project adopts automatic releases using Conventional Commits and release-please.
 
-#### コミットメッセージの形式
+#### Commit Message Format
 
 ```bash
-# 新機能の追加
+# Add new feature
 git commit -m "feat: add plan subcommand for preview mode"
 
-# バグ修正
+# Bug fix
 git commit -m "fix: resolve pattern matching for complex wildcards"
 
-# パフォーマンス改善
+# Performance improvement
 git commit -m "perf: optimize HCL parsing performance"
 
-# リファクタリング
+# Refactoring
 git commit -m "refactor: simplify resource grouping logic"
 
-# ドキュメント更新
+# Documentation update
 git commit -m "docs: update README for subcommand structure"
 
-# テストの追加・修正
+# Test addition/modification
 git commit -m "test: add golden file tests for idempotency"
 
-# CI/CDの変更
+# CI/CD changes
 git commit -m "ci: update GitHub Actions workflow"
 
-# ビルドシステムの変更
+# Build system changes
 git commit -m "build: update go.mod dependencies"
 
-# その他の変更
+# Other changes
 git commit -m "chore: update development documentation"
 ```
 
-#### バージョンに与える影響
+#### Version Impact
 
-- `feat:` → **minor** バージョンアップ (0.1.0 → 0.2.0)
-- `fix:` → **patch** バージョンアップ (0.1.0 → 0.1.1)
-- `BREAKING CHANGE:` フッター → **major** バージョンアップ (0.1.0 → 1.0.0)
-- その他 → **patch** バージョンアップ
+- `feat:` → **minor** version bump (0.1.0 → 0.2.0)
+- `fix:` → **patch** version bump (0.1.0 → 0.1.1)
+- `BREAKING CHANGE:` footer → **major** version bump (0.1.0 → 1.0.0)
+- Others → **patch** version bump
 
-#### 自動リリースプロセス
+#### Automated Release Process
 
-1. **コミット**: Conventional Commitsでmainブランチにコミット
-2. **PR作成**: release-pleaseが自動でversion bump PRを作成
-3. **リリース**: PRをマージするとGoReleaserが自動実行
-4. **成果物**: GitHub Releasesにバイナリとchangelogが公開
+1. **Commit**: Commit to main branch with Conventional Commits
+2. **PR Creation**: release-please automatically creates version bump PR
+3. **Release**: Merging PR triggers automatic GoReleaser execution
+4. **Artifacts**: Binaries and changelog published to GitHub Releases
 
-### 設定ファイル
+### Configuration Files
 
-- `.release-please-manifest.json`: 現在のバージョン管理
-- `release-please-config.json`: リリース設定
-- `.goreleaser.yaml`: バイナリビルド設定
+- `.release-please-manifest.json`: Current version management
+- `release-please-config.json`: Release configuration
+- `.goreleaser.yaml`: Binary build configuration
 
-### 手動リリーステスト
+### Manual Release Testing
 
 ```bash
-# ローカルでリリースビルドをテスト
+# Test release build locally
 make release-snapshot
 
-# GoReleaser設定の確認
+# Check GoReleaser configuration
 make release-check
 ```
 
-## よくある問題と解決方法
+## Common Issues and Solutions
 
-### 1. ゴールデンファイルテストの失敗
+### 1. Golden File Test Failures
 
-出力形式を変更した場合、期待値ファイルの更新が必要です：
+When output format changes, expected value files need updating:
 
 ```bash
-# 新しい出力で期待値を更新
+# Update expected values with new output
 go test -run TestGoldenFiles -v
 cp tmp/integration-test/case*/* testdata/integration/case*/expected/
 ```
 
-### 2. インポートサイクル
+### 2. Import Cycles
 
-テストファイルは別パッケージ（例：`package config_test`）として作成してください。
+Create test files as separate packages (e.g., `package config_test`).
 
-### 3. 非決定的出力
+### 3. Non-deterministic Output
 
-コレクション（スライス、マップ）はソートしてから出力してください。
+Sort collections (slices, maps) before output.
 
-### 4. パターンマッチングのデバッグ
+### 4. Pattern Matching Debugging
 
 ```bash
-# 特定のパターンマッチングテスト
+# Test specific pattern matching
 go test ./internal/splitter -run TestGroupBlocksWithConfig -v
 
-# 設定ファイル検証
+# Configuration file validation
 ./tf-file-organize validate-config testdata/configs/tf-file-organize.yaml
 ```
 
-## 貢献ガイドライン
+## Contribution Guidelines
 
-### プルリクエスト前のチェック
+### Pre-Pull Request Checklist
 
-1. **全テストの実行とパス**
-2. **ゴールデンファイルテスト実行**
-3. **golangci-lint実行**
-4. **Conventional Commitsでのコミット**
-5. **actionlint実行（ワークフロー変更時）**
+1. **Run and pass all tests**
+2. **Run golden file tests**
+3. **Run golangci-lint**
+4. **Commit with Conventional Commits**
+5. **Run actionlint (when modifying workflows)**
 
-### コード品質基準
+### Code Quality Standards
 
-- **テストカバレッジ**: 60%以上を維持
-- **Linting**: golangci-lintによるチェックをパス
-- **ゴールデンファイル**: 出力変更時は期待値ファイルを更新
-- **セキュリティ**: gosecによるセキュリティチェックをパス
+- **Test Coverage**: Maintain 60% or higher
+- **Linting**: Pass golangci-lint checks
+- **Golden Files**: Update expected files when output changes
+- **Security**: Pass gosec security checks
 
-このガイドに従って開発を進めることで、品質とセキュリティを保ちながら機能を拡張できます。
+Following this guide ensures quality and security while extending functionality.

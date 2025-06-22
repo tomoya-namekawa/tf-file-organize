@@ -15,7 +15,6 @@ const (
 )
 
 func TestParseFile(t *testing.T) {
-	// テスト用の一時Terraformファイルを作成
 	tmpDir := t.TempDir()
 	tfPath := filepath.Join(tmpDir, "test.tf")
 
@@ -65,20 +64,17 @@ output "instance_id" {
 		t.Fatalf("Failed to create test terraform file: %v", err)
 	}
 
-	// パーサーでファイルを解析
 	p := parser.New()
 	parsedFile, err := p.ParseFile(tfPath)
 	if err != nil {
 		t.Fatalf("ParseFile failed: %v", err)
 	}
 
-	// ブロック数の検証
 	expectedBlocks := 8 // terraform, provider, variable, locals, resource, data, module, output
 	if len(parsedFile.Blocks) != expectedBlocks {
 		t.Errorf("Expected %d blocks, got %d", expectedBlocks, len(parsedFile.Blocks))
 	}
 
-	// 各ブロックタイプの検証
 	blockTypes := make(map[string]int)
 	for _, block := range parsedFile.Blocks {
 		blockTypes[block.Type]++
@@ -101,7 +97,6 @@ output "instance_id" {
 		}
 	}
 
-	// リソースブロックのラベル検証
 	var resourceBlock *types.Block
 	for _, block := range parsedFile.Blocks {
 		if block.Type == resourceBlockType {
@@ -139,11 +134,10 @@ func TestParseFileInvalidHCL(t *testing.T) {
 	tmpDir := t.TempDir()
 	tfPath := filepath.Join(tmpDir, "invalid.tf")
 
-	// 無効なHCLファイル
 	invalidContent := `
 resource "aws_instance" "web" {
   ami = "ami-12345"
-  // 閉じ括弧なし
+  // Missing closing brace
 `
 
 	err := os.WriteFile(tfPath, []byte(invalidContent), 0644)

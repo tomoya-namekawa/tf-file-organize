@@ -33,18 +33,28 @@ go build -o tf-file-organize
 
 ### Essential Development Commands
 ```bash
-# Code quality checks
+# Code quality checks (run these before commits)
 go mod tidy
 golangci-lint run
 go test -v -coverprofile=coverage.out ./...
 go tool cover -func=coverage.out
 
-# Critical regression tests
+# Critical regression tests (MUST pass before any output changes)
 go test -run TestGoldenFiles -v
 go build && ./tf-file-organize plan testdata/terraform/sample.tf
 
+# Single test execution examples
+go test -run TestSpecificFunction -v ./internal/packagename
+go test ./internal/config -v
+go test ./internal/parser -v
+
 # Workflow validation
 actionlint
+
+# Alternative build using Makefile
+make dev-build
+make test-coverage
+make check  # runs both lint and test
 ```
 
 ## Architecture
@@ -111,9 +121,10 @@ Auto-searches for configuration files in this order:
 ## Testing Strategy
 
 ### Test Structure
-- **Unit Tests**: All `internal/` packages have `*_test.go` files using separate test packages for isolation
+- **Unit Tests**: All `internal/` packages have `*_test.go` files using separate test packages (e.g., `main_test`) for isolation
 - **CLI Tests** (`cli_test.go`): Command-line interface functionality testing via binary execution
 - **Golden File Tests** (`golden_test.go`): **Critical** - End-to-end testing comparing actual output against expected files
+- **Idempotency Tests** (`idempotency_test.go`): Ensures consistent results across multiple runs
 
 ### Test Data Organization
 ```
@@ -165,12 +176,13 @@ go tool cover -func=coverage.out
 
 ### Code Standards
 - Use constants for repeated strings (enforced by goconst linter)
-- Terraform block types defined as constants in `internal/splitter/splitter.go`
+- Terraform block types defined as constants in `internal/splitter/splitter.go` and `internal/usecase/usecase.go`
 - Modern Go patterns: `slices.Contains()` instead of loops
 - Named return values for complex functions
 - **Function Length**: Keep functions under 50 lines; split complex functions into focused sub-functions
 - **Single Responsibility**: Each function should have one clear purpose (recently enforced through refactoring)
 - **Error Handling**: All defer statements in tests must handle errors appropriately (`_ = os.Remove()` pattern)
+- **Test Packages**: Use separate test packages (e.g., `package main_test`) to avoid import cycles and ensure proper isolation
 
 ### Critical Files for Output Changes
 When modifying output behavior, update these files:
@@ -281,3 +293,40 @@ make release-snapshot
 # Check GoReleaser configuration
 make release-check
 ```
+
+## Key Development Workflows
+
+### When Making Output Changes
+1. **Understand Impact**: Changes to parser, splitter, or writer affect golden files
+2. **Run Golden Tests**: `go test -run TestGoldenFiles -v` to see current state
+3. **Make Changes**: Implement your modifications
+4. **Update Golden Files**: `cp tmp/integration-test/case*/* testdata/integration/case*/expected/`
+5. **Verify**: Re-run golden tests to ensure they pass
+
+### When Adding New Features
+1. **Add Tests First**: Write unit tests and update golden files if needed
+2. **Implement Feature**: Follow clean architecture principles
+3. **Update Documentation**: Update README.md and DEVELOPMENT.md as needed
+4. **Run Full Test Suite**: Ensure all tests pass, especially golden file tests
+
+### When Debugging Test Failures
+```bash
+# For golden file test failures
+go test -run TestGoldenFiles -v
+# Check tmp/integration-test/ for actual output vs testdata/integration/*/expected/
+
+# For specific package issues
+go test ./internal/config -v -run TestSpecificFunction
+
+# For CLI issues
+go test -run TestCLI -v
+```
+
+## Development Guidelines
+
+- **Documentation Guidelines**
+  - All documentation and comments should be written in English
+- **Comment Cleanup Policy**
+  - Remove redundant comments that repeat the code
+  - Keep important business logic and security-related comments
+  - Maintain clean, readable code without excessive commenting
