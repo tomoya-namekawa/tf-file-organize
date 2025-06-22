@@ -1,6 +1,6 @@
 # Changelog
 
-## [1.0.0](https://github.com/tomoya-namekawa/tf-file-organize/compare/v0.4.0...v1.0.0) (2025-06-22)
+## [0.5.0](https://github.com/tomoya-namekawa/tf-file-organize/compare/v0.4.0...v0.5.0) (2025-06-22)
 
 
 ### ⚠ BREAKING CHANGES
