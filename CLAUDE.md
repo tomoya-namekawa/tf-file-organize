@@ -6,230 +6,10 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 terraform-file-organize is a Go CLI tool that parses Terraform files and splits them into separate files organized by resource type. The tool uses HashiCorp's HCL parser to analyze Terraform configurations and reorganizes them according to specific naming conventions. It supports both single file and directory input, with optional YAML configuration for custom grouping rules.
 
-## Build and Development Commands
+## Quick Start
 
-This project uses [mise](https://mise.jdx.dev/) for tool management. All development tools are defined in `.mise.toml`.
-
-```bash
-# Install mise and project tools
-mise install
-
-# Build the project
-go build -o terraform-file-organize
-
-# Basic usage examples
-./terraform-file-organize main.tf --dry-run
-./terraform-file-organize . --output-dir tmp/test --dry-run
-./terraform-file-organize testdata/terraform --config testdata/configs/terraform-file-organize.yaml
-
-# Essential development commands
-go mod tidy
-go test -v -coverprofile=coverage.out ./...
-golangci-lint run
-actionlint
-
-# Critical tests (run these before commits)
-go test -run TestGoldenFiles -v
-go build && ./terraform-file-organize testdata/terraform/sample.tf --dry-run
-```
-
-## Architecture
-
-The codebase follows clean architecture principles with strict layered separation:
-
-### Core Components
-
-1. **Usecase Layer** (`internal/usecase/organize.go`): Business logic orchestrator that coordinates all operations. Implements security validation, configuration loading, and error handling. This layer isolates business rules from CLI concerns and provides a clean interface for testing.
-
-2. **Parser** (`internal/parser/terraform.go`): Uses `github.com/hashicorp/hcl/v2` to parse Terraform files into structured data. Extracts all Terraform block types using HCL's BodySchema. Supports both single files and recursive directory parsing.
-
-3. **Config** (`internal/config/config.go`): Manages YAML configuration files for custom grouping rules. Supports wildcard pattern matching, resource exclusion, and filename overrides. Automatically searches for default config files.
-
-4. **Splitter** (`internal/splitter/resource.go`): Groups parsed blocks by type and subtype, implementing both default and configuration-driven file naming logic. **Critical**: Implements deterministic sorting for stable output - resources are sorted alphabetically within groups and groups are sorted by filename.
-
-5. **Writer** (`internal/writer/file.go`): Converts grouped blocks back to HCL format using `hclwrite`. **Key feature**: Implements deterministic attribute ordering by sorting attributes alphabetically before writing. Uses `hclwrite.Format` for consistent formatting without external terraform CLI dependency.
-
-6. **Types** (`pkg/types/terraform.go`): Defines core data structures including Block, ParsedFile, and BlockGroup.
-
-### CLI Interface
-
-Built with Cobra framework (`cmd/root.go`). **Important**: The CLI layer has been refactored to be thin - it only handles argument parsing and delegates all business logic to the usecase layer. This enables better testing and separation of concerns.
-
-- Positional argument: Input path (file or directory, required)
-- `--output-dir/-o`: Output directory (default: same as input path)
-- `--config/-c`: Configuration file path (optional, auto-detects default files)
-- `--dry-run/-d`: Preview mode without file creation
-
-### Configuration System
-
-The tool automatically searches for configuration files in this order:
-1. `terraform-file-organize.yaml`
-2. `terraform-file-organize.yml`
-3. `.terraform-file-organize.yaml`
-4. `.terraform-file-organize.yml`
-
-Configuration supports:
-- **Groups**: Custom file grouping with wildcard patterns (e.g., `aws_s3_*` → `storage.tf`)
-- **Overrides**: Custom filenames for block types (e.g., `variable` → `vars.tf`)
-- **Exclude**: Patterns to keep as individual files
-
-### Key Implementation Details
-
-**Deterministic Output**: Critical for CI/CD and version control. Both resource ordering (via `sortBlocksInGroup`) and attribute ordering (via alphabetical sorting in `copyBlockBodyGeneric`) are deterministic.
-
-**Security Measures**: Path traversal protection implemented in the usecase layer with comprehensive validation. File paths are sanitized using `filepath.Clean` and `filepath.Base`.
-
-**HCL Processing**: The writer handles complex Terraform expressions through multiple fallback mechanisms. Uses `hclsyntax.Body` for direct access to parsed syntax trees when standard evaluation fails.
-
-**Testing Architecture**: Uses separate test packages (e.g., `config_test`) to avoid import cycles and ensure proper isolation. Golden file tests in `testdata/integration/` provide regression protection.
-
-### Testing Strategy
-
-The project implements comprehensive testing with multiple approaches:
-
-**Unit Tests**: All packages in `internal/` have corresponding `*_test.go` files using separate test packages (e.g., `config_test`, `parser_test`, `usecase_test`) for proper isolation and to avoid import cycles.
-
-**Integration Tests**: 
-- `integration_test.go`: Binary-based CLI testing that avoids global variable issues
-- `integration_golden_test.go`: **Critical** - Golden file testing that compares actual output against expected output files. These tests ensure deterministic output and catch regressions.
-
-**Test Data Structure**:
-- `testdata/terraform/`: Sample Terraform files for basic testing
-- `testdata/integration/case*/`: Golden file test cases with input/expected output pairs
-  - `case1/`: Basic Terraform blocks with default configuration
-  - `case2/`: Multiple files with same resource types (basic grouping)  
-  - `case3/`: Custom grouping rules with configuration file
-- `testdata/configs/`: Configuration file examples
-- `tmp/`: All test outputs (gitignored)
-
-**Golden File Testing**: **Must be maintained** - Uses `testdata/integration/` structure where each case has `input/` and `expected/` directories. Tests verify exact file content matches including attribute ordering and formatting. When making changes that affect output, update expected files by running the tool and copying results.
-
-**Test Execution Notes**:
-- Golden file tests are enabled and critical for preventing regressions
-- Tests assume deterministic output (attributes and resources sorted alphabetically)
-- Failed golden file tests indicate either bugs or that expected outputs need updating
-
-**Key Testing Commands**:
-```bash
-# Run golden file tests to check for regressions (most important)
-go test -run TestGoldenFiles -v
-
-# Test specific functionality
-go test -run TestWildcardMatching ./internal/config
-
-# Test usecase layer (business logic)
-go test ./internal/usecase -v
-
-# Update golden files when output format changes (manual process)
-./terraform-file-organize testdata/integration/case1/input -o testdata/integration/case1/expected
-```
-
-## Development Principles
-
-**HCL Processing**: Always use https://github.com/hashicorp/hcl for Terraform-related processing. This ensures compatibility and leverages HashiCorp's official parsing capabilities.
-
-**Deterministic Output**: Any change to output generation must maintain deterministic behavior. Sort all collections (resources, attributes, filenames) alphabetically to ensure consistent results across runs.
-
-**Security First**: All file path operations must use `filepath.Clean` and `filepath.Base` to prevent path traversal attacks. Validate all user inputs in the usecase layer.
-
-**Testing Requirements**: 
-- Golden file tests are mandatory for any output changes
-- Use separate test packages to avoid import cycles
-- All new functionality requires corresponding unit tests
-
-**Code Standards**:
-- Use constants for repeated strings (enforced by goconst linter)
-- Terraform block types defined as constants in `internal/splitter/resource.go`
-- Modern Go patterns: use `slices.Contains()` instead of loops, `b.Loop()` for benchmarks
-- Named return values for complex functions to improve readability
-
-## Critical Files for Output Changes
-
-When modifying output behavior, these files are critical:
-- `internal/splitter/resource.go` - Handles resource sorting and grouping
-- `internal/writer/file.go` - Controls attribute ordering and HCL formatting
-- `testdata/integration/case*/expected/` - Golden file test expectations
-
-## CI/CD Configuration
-
-The project uses GitHub Actions for continuous integration with comprehensive testing and security checks:
-
-**CI Pipeline** (`.github/workflows/ci.yml`):
-- **test**: Runs comprehensive test suite with race detection and coverage reporting
-- **lint**: Executes golangci-lint via dedicated GitHub Action with multiple linters enabled (includes gosec)
-- **build**: Builds binary and verifies it works with sample inputs
-
-**Workflow Lint Pipeline** (`.github/workflows/workflow-lint.yml`):
-Runs only when GitHub Actions workflows or mise configuration changes:
-- **workflow-lint**: Lints GitHub Actions workflows using actionlint
-- **pinact-check**: Verifies all GitHub Actions are pinned to commit hashes for security
-- Triggered by changes to `.github/**` or `.mise.toml` files
-
-**Linting Configuration** (`.golangci.yml`):
-- golangci-lint v2 configuration with security-focused rules
-- Key enabled linters: gosec, govet, gocritic, goconst, staticcheck, exhaustive
-- Test files excluded from certain checks (dupl, funlen, gocyclo, gosec, gocritic)
-- Uses `slices.Contains()` and modern Go patterns (enforced by modernize tool)
-
-**Security Features**:
-- All GitHub Actions pinned to commit SHA hashes
-- Automated pinact verification to prevent action tampering
-- gosec security scanning integrated into CI
-- renovatebot (not dependabot) used for dependency management
-
-## Development Workflow
-
-**Code Quality Pipeline**:
-```bash
-# 1. After Go code changes, run modernize analysis
-go run golang.org/x/tools/gopls/internal/analysis/modernize/cmd/modernize@latest -test ./...
-
-# 2. Run full linting (golangci-lint v2 configured)
-golangci-lint run
-
-# 3. Run tests with coverage
-go test -v -coverprofile=coverage.out ./...
-go tool cover -func=coverage.out
-
-# 4. Build verification
-go build -o terraform-file-organize
-
-# 5. Integration test with actual binary
-./terraform-file-organize testdata/terraform/sample.tf --dry-run
-```
-
-**Critical Development Commands**:
-```bash
-# Test golden files (regression detection)
-go test -run TestGoldenFiles -v
-
-# Test with coverage (target: >60%)
-go test -v -coverprofile=coverage.out ./...
-
-# Run specific package tests
-go test ./internal/config -v
-go test ./internal/parser -v
-go test ./internal/splitter -v
-go test ./internal/writer -v
-go test ./internal/usecase -v
-
-# Run integration tests
-go test -v ./integration_test.go
-go test -v ./integration_golden_test.go
-
-# Run single test by name
-go test -run TestGroupBlocks ./internal/splitter
-
-# Workflow linting (GitHub Actions)
-actionlint
-```
-
-**Mise Integration**:
-This project uses [mise](https://mise.jdx.dev/) for unified tool management. Key tools:
-- `go` (latest): Go toolchain
-- `golangci-lint` (v2.1.6): Comprehensive linting
-- `actionlint` (latest): GitHub Actions workflow linting
-- `pinact` (latest): Security verification for GitHub Actions
+### Tool Management
+This project uses [mise](https://mise.jdx.dev/) for unified tool management. All development tools are defined in `.mise.toml`.
 
 ```bash
 # Install all development tools
@@ -238,3 +18,185 @@ mise install
 # Check tool versions
 mise list
 ```
+
+### Build and Basic Usage
+```bash
+# Build the project
+go build -o terraform-file-organize
+
+# Basic usage examples
+./terraform-file-organize main.tf --dry-run
+./terraform-file-organize . --output-dir tmp/test --dry-run
+./terraform-file-organize testdata/terraform --config testdata/configs/terraform-file-organize.yaml
+```
+
+### Essential Development Commands
+```bash
+# Code quality checks
+go mod tidy
+golangci-lint run
+go test -v -coverprofile=coverage.out ./...
+go tool cover -func=coverage.out
+
+# Critical regression tests
+go test -run TestGoldenFiles -v
+go build && ./terraform-file-organize testdata/terraform/sample.tf --dry-run
+
+# Workflow validation
+actionlint
+```
+
+## Architecture
+
+The codebase follows clean architecture principles with strict layered separation:
+
+### Core Components
+
+1. **Usecase Layer** (`internal/usecase/organize.go`): Business logic orchestrator that coordinates all operations. Implements security validation, configuration loading, and error handling.
+
+2. **Parser** (`internal/parser/terraform.go`): Uses `github.com/hashicorp/hcl/v2` to parse Terraform files into structured data. Supports both single files and recursive directory parsing.
+
+3. **Config** (`internal/config/config.go`): Manages YAML configuration files for custom grouping rules. Supports wildcard pattern matching, resource exclusion, and filename overrides.
+
+4. **Splitter** (`internal/splitter/resource.go`): Groups parsed blocks by type and subtype. **Critical**: Implements deterministic sorting for stable output.
+
+5. **Writer** (`internal/writer/file.go`): Converts grouped blocks back to HCL format using `hclwrite`. **Key feature**: Implements deterministic attribute ordering.
+
+6. **Types** (`pkg/types/terraform.go`): Defines core data structures including Block, ParsedFile, and BlockGroup.
+
+### CLI Interface
+
+Built with Cobra framework (`cmd/root.go`). The CLI layer is thin - it only handles argument parsing and delegates business logic to the usecase layer.
+
+**Arguments:**
+- Positional argument: Input path (file or directory, required)
+- `--output-dir/-o`: Output directory (default: same as input path)
+- `--config/-c`: Configuration file path (optional, auto-detects default files)
+- `--dry-run/-d`: Preview mode without file creation
+
+### Configuration System
+
+Auto-searches for configuration files in this order:
+1. `terraform-file-organize.yaml`
+2. `terraform-file-organize.yml`
+3. `.terraform-file-organize.yaml`
+4. `.terraform-file-organize.yml`
+
+**Configuration features:**
+- **Groups**: Custom file grouping with wildcard patterns (e.g., `aws_s3_*` → `storage.tf`)
+- **Overrides**: Custom filenames for block types (e.g., `variable` → `vars.tf`)
+- **Exclude**: Patterns to keep as individual files
+
+## Testing Strategy
+
+### Test Structure
+- **Unit Tests**: All `internal/` packages have `*_test.go` files using separate test packages for isolation
+- **Integration Tests**: Binary-based CLI testing and golden file testing
+- **Golden File Tests**: **Critical** - Compares actual output against expected files in `testdata/integration/`
+
+### Test Data Organization
+```
+testdata/
+├── terraform/           # Sample Terraform files for basic testing
+├── integration/         # Golden file test cases
+│   ├── case1/          # Basic blocks (default config)
+│   ├── case2/          # Multiple files (basic grouping)
+│   └── case3/          # Custom grouping rules
+├── configs/            # Configuration file examples
+└── tmp/               # Test outputs (gitignored)
+```
+
+### Key Test Commands
+```bash
+# Regression detection (most important)
+go test -run TestGoldenFiles -v
+
+# Package-specific tests
+go test ./internal/config -v
+go test ./internal/parser -v
+go test ./internal/splitter -v
+go test ./internal/writer -v
+go test ./internal/usecase -v
+
+# Coverage target: >60%
+go test -v -coverprofile=coverage.out ./...
+go tool cover -func=coverage.out
+```
+
+## Development Principles
+
+### Core Requirements
+- **HCL Processing**: Always use `github.com/hashicorp/hcl` for Terraform-related processing
+- **Deterministic Output**: Sort all collections (resources, attributes, filenames) alphabetically
+- **Security First**: Use `filepath.Clean` and `filepath.Base` to prevent path traversal attacks
+- **Golden File Tests**: Mandatory for any output changes
+
+### Code Standards
+- Use constants for repeated strings (enforced by goconst linter)
+- Terraform block types defined as constants in `internal/splitter/resource.go`
+- Modern Go patterns: `slices.Contains()` instead of loops
+- Named return values for complex functions
+
+### Critical Files for Output Changes
+When modifying output behavior, update these files:
+- `internal/splitter/resource.go` - Resource sorting and grouping
+- `internal/writer/file.go` - Attribute ordering and HCL formatting
+- `testdata/integration/case*/expected/` - Golden file test expectations
+
+## CI/CD Configuration
+
+### GitHub Actions Pipelines
+
+**Main CI Pipeline** (`.github/workflows/ci.yml`):
+- **test**: Comprehensive test suite with race detection and coverage
+- **lint**: golangci-lint with security-focused rules (gosec, govet, gocritic, etc.)
+- **build**: Binary build and sample input verification
+
+**Workflow Lint Pipeline** (`.github/workflows/workflow-lint.yml`):
+- **workflow-lint**: actionlint for GitHub Actions
+- **pinact-check**: Verifies all actions are pinned to commit hashes
+- Triggered by changes to `.github/**` or `.mise.toml`
+
+### Security Features
+- All GitHub Actions pinned to commit SHA hashes
+- gosec security scanning integrated into CI
+- renovatebot for dependency management
+- Path traversal protection in usecase layer
+
+### Tool Versions (mise-managed)
+```toml
+[tools]
+go = "latest"
+golangci-lint = "v2.1.6"
+actionlint = "latest"
+pinact = "latest"
+```
+
+## Development Workflow
+
+### Pre-commit Checklist
+```bash
+# 1. Format and lint
+golangci-lint run
+
+# 2. Run tests with coverage
+go test -v -coverprofile=coverage.out ./...
+
+# 3. Verify golden files
+go test -run TestGoldenFiles -v
+
+# 4. Build and integration test
+go build -o terraform-file-organize
+./terraform-file-organize testdata/terraform/sample.tf --dry-run
+
+# 5. Workflow validation
+actionlint
+```
+
+### Key Implementation Details
+
+**Deterministic Output**: Critical for CI/CD and version control. Both resource ordering (via `sortBlocksInGroup`) and attribute ordering (via alphabetical sorting in `copyBlockBodyGeneric`) are deterministic.
+
+**Testing Architecture**: Uses separate test packages to avoid import cycles. Golden file tests provide regression protection with exact content matching.
+
+**HCL Processing**: The writer handles complex Terraform expressions through multiple fallback mechanisms using `hclsyntax.Body` for direct syntax tree access.
