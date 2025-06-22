@@ -249,7 +249,7 @@ func TestCLIErrorHandling(t *testing.T) {
 
 	// 引数なしで実行
 	cmd = exec.Command(binary)
-	output, err = cmd.CombinedOutput()
+	_, err = cmd.CombinedOutput()
 	if err == nil {
 		t.Errorf("Expected error for missing arguments, got none")
 	}

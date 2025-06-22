@@ -21,7 +21,6 @@ linters:
     - unparam       # 未使用パラメータの検出
     - gocritic      # Go批評
     - revive        # golintの後継
-    - exportloopref # ループ変数の参照問題
     - nolintlint    # nolintディレクティブの検証
 
 linters-settings:
@@ -62,6 +61,7 @@ issues:
   max-same-issues: 0
 
 output:
-  format: colored-line-number
+  formats:
+    - format: colored-line-number
   print-issued-lines: true
   print-linter-name: true

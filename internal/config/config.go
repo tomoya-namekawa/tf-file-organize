@@ -71,8 +71,21 @@ func LoadConfig(configPath string) (*Config, error) {
 
 // validateConfig validates the loaded configuration for security and correctness
 func validateConfig(config *Config) error {
-	// グループ設定の検証
-	for i, group := range config.Groups {
+	if err := validateGroups(config.Groups); err != nil {
+		return err
+	}
+	if err := validateOverrides(config.Overrides); err != nil {
+		return err
+	}
+	if err := validateExcludePatterns(config.Exclude); err != nil {
+		return err
+	}
+	return nil
+}
+
+// validateGroups validates group configurations
+func validateGroups(groups []GroupConfig) error {
+	for i, group := range groups {
 		if group.Name == "" {
 			return fmt.Errorf("group %d: name cannot be empty", i)
 		}
@@ -81,7 +94,6 @@ func validateConfig(config *Config) error {
 			return fmt.Errorf("group %d (%s): filename cannot be empty", i, group.Name)
 		}
 
-		// ファイル名のセキュリティ検証
 		if err := validateFilename(group.Filename); err != nil {
 			return fmt.Errorf("group %d (%s): invalid filename: %w", i, group.Name, err)
 		}
@@ -90,19 +102,29 @@ func validateConfig(config *Config) error {
 			return fmt.Errorf("group %d (%s): at least one pattern is required", i, group.Name)
 		}
 
-		// パターンの検証
-		for j, pattern := range group.Patterns {
-			if pattern == "" {
-				return fmt.Errorf("group %d (%s), pattern %d: pattern cannot be empty", i, group.Name, j)
-			}
-			if len(pattern) > 100 { // 過度に長いパターンを制限
-				return fmt.Errorf("group %d (%s), pattern %d: pattern too long (max 100 chars)", i, group.Name, j)
-			}
+		if err := validatePatterns(group.Patterns, i, group.Name); err != nil {
+			return err
 		}
 	}
+	return nil
+}
 
-	// オーバーライド設定の検証
-	for blockType, filename := range config.Overrides {
+// validatePatterns validates pattern configurations
+func validatePatterns(patterns []string, groupIndex int, groupName string) error {
+	for j, pattern := range patterns {
+		if pattern == "" {
+			return fmt.Errorf("group %d (%s), pattern %d: pattern cannot be empty", groupIndex, groupName, j)
+		}
+		if len(pattern) > 100 {
+			return fmt.Errorf("group %d (%s), pattern %d: pattern too long (max 100 chars)", groupIndex, groupName, j)
+		}
+	}
+	return nil
+}
+
+// validateOverrides validates override configurations
+func validateOverrides(overrides map[string]string) error {
+	for blockType, filename := range overrides {
 		if blockType == "" {
 			return fmt.Errorf("override: block type cannot be empty")
 		}
@@ -113,9 +135,12 @@ func validateConfig(config *Config) error {
 			return fmt.Errorf("override for %s: invalid filename: %w", blockType, err)
 		}
 	}
+	return nil
+}
 
-	// 除外パターンの検証
-	for i, pattern := range config.Exclude {
+// validateExcludePatterns validates exclude pattern configurations
+func validateExcludePatterns(patterns []string) error {
+	for i, pattern := range patterns {
 		if pattern == "" {
 			return fmt.Errorf("exclude pattern %d: pattern cannot be empty", i)
 		}
@@ -123,7 +148,6 @@ func validateConfig(config *Config) error {
 			return fmt.Errorf("exclude pattern %d: pattern too long (max 100 chars)", i)
 		}
 	}
-
 	return nil
 }
 

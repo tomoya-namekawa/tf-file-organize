@@ -132,7 +132,7 @@ func getFileList(dir string) ([]string, error) {
 }
 
 // compareFiles は2つのファイルの内容を比較
-func compareFiles(t *testing.T, expectedPath, actualPath string) error {
+func compareFiles(_ *testing.T, expectedPath, actualPath string) error {
 	expectedContent, err := os.ReadFile(expectedPath)
 	if err != nil {
 		return fmt.Errorf("failed to read expected file: %w", err)

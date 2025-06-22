@@ -178,36 +178,7 @@ exclude:
 
 ## 開発
 
-### 必要な依存関係
-
-- Go 1.24.4+
-- github.com/hashicorp/hcl/v2
-- github.com/spf13/cobra
-
-### ビルドとテスト
-
-```bash
-# 依存関係のインストール
-go mod tidy
-
-# ビルド
-go build -o terraform-file-organize
-
-# 全テストの実行
-go test ./...
-
-# ゴールデンファイルテスト（重要）
-go test -run TestGoldenFiles -v
-
-# テスト実行（単一ファイル）
-./terraform-file-organize testdata/terraform/sample.tf --dry-run
-
-# テスト実行（ディレクトリ）
-./terraform-file-organize testdata/terraform --output-dir tmp/test --dry-run
-
-# 設定ファイル付きテスト
-./terraform-file-organize testdata/terraform --config testdata/configs/terraform-file-organize.yaml --dry-run
-```
+開発に関する詳細な情報は [DEVELOPMENT.md](DEVELOPMENT.md) を参照してください。
 
 ## 実用例
 
@@ -276,8 +247,4 @@ CI/CDやバージョン管理との互換性を確保するため、以下の仕
 
 プルリクエストやイシューの報告を歓迎します。バグ報告や機能要求は GitHub Issues をご利用ください。
 
-### 開発時の注意点
-
-- 全ての変更はゴールデンファイルテストで検証してください
-- 出力形式を変更する場合は期待値ファイルの更新が必要です
-- セキュリティに関わる変更は特に慎重にテストしてください
+開発に関する詳細は [DEVELOPMENT.md](DEVELOPMENT.md) を参照してください。

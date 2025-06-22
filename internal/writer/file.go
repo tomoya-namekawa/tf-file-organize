@@ -75,7 +75,7 @@ func (w *Writer) writeGroup(group *types.BlockGroup) error {
 	// hclwrite.Formatを使用してフォーマット
 	formattedContent := hclwrite.Format(content)
 
-	if err := os.WriteFile(filepath, formattedContent, 0644); err != nil {
+	if err := os.WriteFile(filepath, formattedContent, 0600); err != nil {
 		return fmt.Errorf("failed to write file %s: %w", filepath, err)
 	}
 
@@ -86,40 +86,6 @@ func (w *Writer) writeGroup(group *types.BlockGroup) error {
 func (w *Writer) copyBlockBody(sourceBody hcl.Body, targetBody *hclwrite.Body) error {
 	// より直接的なアプローチを採用
 	return w.copyBlockBodyGeneric(sourceBody, targetBody)
-}
-
-// copyFromSyntaxBody はhclsyntax.Bodyから直接コピー
-func (w *Writer) copyFromSyntaxBody(syntaxBody *hclsyntax.Body, targetBody *hclwrite.Body) error {
-	// 属性名をソートして決定的な順序にする
-	var attrNames []string
-	for name := range syntaxBody.Attributes {
-		attrNames = append(attrNames, name)
-	}
-	sort.Strings(attrNames)
-
-	// ソートされた順序で属性を直接コピー
-	for _, name := range attrNames {
-		attr := syntaxBody.Attributes[name]
-		// 値を評価してからコピー
-		value, valueDiags := attr.Expr.Value(nil)
-		if !valueDiags.HasErrors() {
-			targetBody.SetAttributeValue(name, value)
-		} else {
-			// 評価に失敗した場合は元の式をそのまま使用
-			// 複雑な式の場合はフォールバック
-			w.setAttributeFromExpr(targetBody, name, attr.Expr)
-		}
-	}
-
-	// ブロックを直接コピー
-	for _, block := range syntaxBody.Blocks {
-		nestedBlock := targetBody.AppendNewBlock(block.Type, block.Labels)
-		if err := w.copyBlockBody(block.Body, nestedBlock.Body()); err != nil {
-			return fmt.Errorf("failed to copy nested block: %w", err)
-		}
-	}
-
-	return nil
 }
 
 // setAttributeFromExpr は式から属性を設定
@@ -196,7 +162,8 @@ func (w *Writer) copyBlockBodyGeneric(sourceBody hcl.Body, targetBody *hclwrite.
 	// PartialContentで属性とブロックを取得
 	content, remaining, diags := sourceBody.PartialContent(schema)
 	if diags.HasErrors() {
-		// エラーがあっても続行
+		// エラーがあっても続行してベストエフォートで処理
+		fmt.Printf("Warning: HCL parsing diagnostics: %v\n", diags)
 	}
 
 	// まず全ての属性を取得してアルファベット順でソートしてコピー
@@ -243,13 +210,4 @@ func (w *Writer) copyBlockBodyGeneric(sourceBody hcl.Body, targetBody *hclwrite.
 	}
 
 	return nil
-}
-
-// convertToStrings はinterface{}のスライスを文字列のスライスに変換
-func convertToStrings(values []interface{}) []string {
-	result := make([]string, len(values))
-	for i, v := range values {
-		result[i] = fmt.Sprintf("%v", v)
-	}
-	return result
 }
