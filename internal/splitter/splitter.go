@@ -44,10 +44,15 @@ func NewWithConfig(cfg *config.Config) *Splitter {
 	}
 }
 
-func (s *Splitter) GroupBlocks(parsedFile *types.ParsedFile) []*types.BlockGroup {
+func (s *Splitter) GroupBlocks(parsedFiles *types.ParsedFiles) ([]*types.BlockGroup, error) {
+	// Check for duplicate resource names before grouping
+	if err := s.checkForDuplicateResources(parsedFiles.AllBlocks()); err != nil {
+		return nil, err
+	}
+
 	groups := make(map[string]*types.BlockGroup)
 
-	for _, block := range parsedFile.Blocks {
+	for _, block := range parsedFiles.AllBlocks() {
 		key, filename := s.getGroupKeyAndFilename(block)
 
 		if group, exists := groups[key]; exists {
@@ -72,7 +77,7 @@ func (s *Splitter) GroupBlocks(parsedFile *types.ParsedFile) []*types.BlockGroup
 		return result[i].FileName < result[j].FileName
 	})
 
-	return result
+	return result, nil
 }
 
 func (s *Splitter) getGroupKeyAndFilename(block *types.Block) (groupKey, filename string) {
@@ -336,4 +341,33 @@ func (s *Splitter) getBlockSortKey(block *types.Block) string {
 		key += "_" + label
 	}
 	return key
+}
+
+// checkForDuplicateResources checks for duplicate resource names across all blocks
+func (s *Splitter) checkForDuplicateResources(blocks []*types.Block) error {
+	resourceNames := make(map[string]bool)
+
+	for _, block := range blocks {
+		// Only check resources and data sources which follow similar naming
+		switch block.Type {
+		case blockTypeResource, blockTypeData:
+			if len(block.Labels) >= 2 {
+				// Create resource key: "resource_type.resource_name" or "data.data_type.data_name"
+				var resourceKey string
+				switch block.Type {
+				case blockTypeResource:
+					resourceKey = fmt.Sprintf("%s.%s", block.Labels[0], block.Labels[1])
+				case blockTypeData:
+					resourceKey = fmt.Sprintf("data.%s.%s", block.Labels[0], block.Labels[1])
+				}
+
+				if resourceNames[resourceKey] {
+					return fmt.Errorf("duplicate resource name '%s' found", resourceKey)
+				}
+				resourceNames[resourceKey] = true
+			}
+		}
+	}
+
+	return nil
 }

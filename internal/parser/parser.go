@@ -36,7 +36,8 @@ func (p *Parser) ParseFile(filename string) (*types.ParsedFile, error) {
 	}
 
 	parsedFile := &types.ParsedFile{
-		Blocks: make([]*types.Block, 0),
+		FileName: filename,
+		Blocks:   make([]*types.Block, 0),
 	}
 
 	if file.Body == nil {

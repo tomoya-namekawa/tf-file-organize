@@ -33,7 +33,13 @@ func TestGroupBlocksDefault(t *testing.T) {
 		},
 	}
 
-	groups := s.GroupBlocks(parsedFile)
+	parsedFiles := &types.ParsedFiles{
+		Files: []*types.ParsedFile{parsedFile},
+	}
+	groups, err := s.GroupBlocks(parsedFiles)
+	if err != nil {
+		t.Fatalf("Unexpected error: %v", err)
+	}
 
 	expectedGroups := 9
 	if len(groups) != expectedGroups {
@@ -121,7 +127,13 @@ func TestGroupBlocksWithConfig(t *testing.T) {
 		},
 	}
 
-	groups := s.GroupBlocks(parsedFile)
+	parsedFiles := &types.ParsedFiles{
+		Files: []*types.ParsedFile{parsedFile},
+	}
+	groups, err := s.GroupBlocks(parsedFiles)
+	if err != nil {
+		t.Fatalf("Unexpected error: %v", err)
+	}
 
 	groupsByFileName := make(map[string]*types.BlockGroup)
 	for _, group := range groups {
@@ -175,4 +187,89 @@ func TestGroupBlocksWithConfig(t *testing.T) {
 	} else {
 		t.Error("output__debug_info.tf group not found")
 	}
+}
+
+func TestCheckForDuplicateResources(t *testing.T) {
+	s := splitter.New()
+
+	t.Run("duplicate resource names should return error", func(t *testing.T) {
+		parsedFile := &types.ParsedFile{
+			Blocks: []*types.Block{
+				createTestBlock("resource", []string{"aws_instance", "web"}),
+				createTestBlock("resource", []string{"aws_instance", "web"}), // duplicate
+			},
+		}
+		parsedFiles := &types.ParsedFiles{
+			Files: []*types.ParsedFile{parsedFile},
+		}
+
+		_, err := s.GroupBlocks(parsedFiles)
+		if err == nil {
+			t.Error("Expected error for duplicate resource names, got nil")
+		}
+
+		expectedMsg := "duplicate resource name 'aws_instance.web' found"
+		if err.Error() != expectedMsg {
+			t.Errorf("Expected error message '%s', got '%s'", expectedMsg, err.Error())
+		}
+	})
+
+	t.Run("duplicate data source names should return error", func(t *testing.T) {
+		parsedFile := &types.ParsedFile{
+			Blocks: []*types.Block{
+				createTestBlock("data", []string{"aws_ami", "ubuntu"}),
+				createTestBlock("data", []string{"aws_ami", "ubuntu"}), // duplicate
+			},
+		}
+		parsedFiles := &types.ParsedFiles{
+			Files: []*types.ParsedFile{parsedFile},
+		}
+
+		_, err := s.GroupBlocks(parsedFiles)
+		if err == nil {
+			t.Error("Expected error for duplicate data source names, got nil")
+		}
+
+		expectedMsg := "duplicate resource name 'data.aws_ami.ubuntu' found"
+		if err.Error() != expectedMsg {
+			t.Errorf("Expected error message '%s', got '%s'", expectedMsg, err.Error())
+		}
+	})
+
+	t.Run("unique resource names should not return error", func(t *testing.T) {
+		parsedFile := &types.ParsedFile{
+			Blocks: []*types.Block{
+				createTestBlock("resource", []string{"aws_instance", "web1"}),
+				createTestBlock("resource", []string{"aws_instance", "web2"}), // different name
+				createTestBlock("data", []string{"aws_ami", "ubuntu"}),
+			},
+		}
+		parsedFiles := &types.ParsedFiles{
+			Files: []*types.ParsedFile{parsedFile},
+		}
+
+		_, err := s.GroupBlocks(parsedFiles)
+		if err != nil {
+			t.Errorf("Expected no error for unique resource names, got: %v", err)
+		}
+	})
+
+	t.Run("non-resource blocks should not be checked", func(t *testing.T) {
+		parsedFile := &types.ParsedFile{
+			Blocks: []*types.Block{
+				createTestBlock("variable", []string{"instance_type"}),
+				createTestBlock("variable", []string{"instance_type"}), // duplicate variable names are allowed
+				createTestBlock("output", []string{"id"}),
+				createTestBlock("output", []string{"id"}), // duplicate output names are allowed
+			},
+		}
+		parsedFiles := &types.ParsedFiles{
+			Files: []*types.ParsedFile{parsedFile},
+		}
+
+		_, err := s.GroupBlocks(parsedFiles)
+		if err != nil {
+			t.Errorf("Expected no error for non-resource blocks, got: %v", err)
+		}
+	})
 }

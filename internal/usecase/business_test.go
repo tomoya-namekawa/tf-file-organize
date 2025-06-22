@@ -27,15 +27,15 @@ func TestOrganizeFilesUsecase_ExecuteBusinessLogic(t *testing.T) {
 				},
 			},
 			setupMocks: func(parser *MockParser, splitter *MockSplitter, writer *MockWriter, configLoader *MockConfigLoader) {
-				splitter.groupBlocksFunc = func(parsedFile *types.ParsedFile) []*types.BlockGroup {
+				splitter.groupBlocksFunc = func(parsedFiles *types.ParsedFiles) ([]*types.BlockGroup, error) {
 					return []*types.BlockGroup{
 						{
 							BlockType: "resource",
 							SubType:   "aws_instance",
-							Blocks:    parsedFile.Blocks,
+							Blocks:    parsedFiles.AllBlocks(),
 							FileName:  "resource__aws_instance.tf",
 						},
-					}
+					}, nil
 				}
 				writer.writeGroupsFunc = func(groups []*types.BlockGroup) error {
 					return nil
@@ -57,13 +57,13 @@ func TestOrganizeFilesUsecase_ExecuteBusinessLogic(t *testing.T) {
 				{Type: "output", Labels: []string{"instance_ip"}},
 			},
 			setupMocks: func(parser *MockParser, splitter *MockSplitter, writer *MockWriter, configLoader *MockConfigLoader) {
-				splitter.groupBlocksFunc = func(parsedFile *types.ParsedFile) []*types.BlockGroup {
-					blocks := parsedFile.Blocks
+				splitter.groupBlocksFunc = func(parsedFiles *types.ParsedFiles) ([]*types.BlockGroup, error) {
+					blocks := parsedFiles.AllBlocks()
 					return []*types.BlockGroup{
 						{BlockType: "resource", Blocks: blocks[:1], FileName: "resource__aws_instance.tf"},
 						{BlockType: "variable", Blocks: blocks[1:2], FileName: "variables.tf"},
 						{BlockType: "output", Blocks: blocks[2:], FileName: "outputs.tf"},
-					}
+					}, nil
 				}
 				writer.writeGroupsFunc = func(groups []*types.BlockGroup) error {
 					return nil
@@ -109,10 +109,10 @@ func TestOrganizeFilesUsecase_ExecuteBusinessLogic(t *testing.T) {
 				{Type: "resource", Labels: []string{"aws_instance", "web"}},
 			},
 			setupMocks: func(parser *MockParser, splitter *MockSplitter, writer *MockWriter, configLoader *MockConfigLoader) {
-				splitter.groupBlocksFunc = func(parsedFile *types.ParsedFile) []*types.BlockGroup {
+				splitter.groupBlocksFunc = func(parsedFiles *types.ParsedFiles) ([]*types.BlockGroup, error) {
 					return []*types.BlockGroup{
-						{BlockType: "resource", Blocks: parsedFile.Blocks, FileName: "resource.tf"},
-					}
+						{BlockType: "resource", Blocks: parsedFiles.AllBlocks(), FileName: "resource.tf"},
+					}, nil
 				}
 				writer.writeGroupsFunc = func(groups []*types.BlockGroup) error {
 					return errors.New("write error")
@@ -172,8 +172,15 @@ func testBusinessLogic(_ *usecase.OrganizeFilesUsecase, blocks []*types.Block, c
 		}, nil
 	}
 
-	parsedFile := &types.ParsedFile{Blocks: blocks}
-	groups := splitter.GroupBlocks(parsedFile)
+	parsedFiles := &types.ParsedFiles{
+		Files: []*types.ParsedFile{
+			{FileName: "test.tf", Blocks: blocks},
+		},
+	}
+	groups, err := splitter.GroupBlocks(parsedFiles)
+	if err != nil {
+		return nil, err
+	}
 
 	err = writer.WriteGroups(groups)
 	if err != nil {
@@ -198,12 +205,12 @@ func TestOrganizeFilesUsecase_ProcessingFlow(t *testing.T) {
 		{Type: "variable", Labels: []string{"instance_type"}},
 	}
 
-	splitter.groupBlocksFunc = func(parsedFile *types.ParsedFile) []*types.BlockGroup {
-		parsedBlocks := parsedFile.Blocks
+	splitter.groupBlocksFunc = func(parsedFiles *types.ParsedFiles) ([]*types.BlockGroup, error) {
+		parsedBlocks := parsedFiles.AllBlocks()
 		return []*types.BlockGroup{
 			{BlockType: "resource", Blocks: parsedBlocks[:1], FileName: "resource.tf"},
 			{BlockType: "variable", Blocks: parsedBlocks[1:], FileName: "variables.tf"},
-		}
+		}, nil
 	}
 
 	writer.writeGroupsFunc = func(groups []*types.BlockGroup) error {

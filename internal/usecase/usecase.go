@@ -26,7 +26,7 @@ type ParserInterface interface {
 }
 
 type SplitterInterface interface {
-	GroupBlocks(parsedFile *types.ParsedFile) []*types.BlockGroup
+	GroupBlocks(parsedFiles *types.ParsedFiles) ([]*types.BlockGroup, error)
 }
 
 type WriterInterface interface {
@@ -106,61 +106,7 @@ func (d *DefaultConfigLoader) LoadConfig(configPath string) (*config.Config, err
 
 // Execute performs the main business logic for organizing Terraform files.
 func (uc *OrganizeFilesUsecase) Execute(req *OrganizeFilesRequest) (*OrganizeFilesResponse, error) {
-	preparationResult, err := uc.prepareExecution(req)
-	if err != nil {
-		return nil, err
-	}
-
-	processingResult, err := uc.processBlocks(req, preparationResult)
-	if err != nil {
-		return nil, err
-	}
-
-	if len(processingResult.allBlocks) == 0 {
-		fmt.Println("No Terraform blocks found to organize")
-		return &OrganizeFilesResponse{
-			ProcessedFiles: processingResult.fileCount,
-			TotalBlocks:    0,
-			FileGroups:     0,
-			OutputDir:      preparationResult.outputDir,
-			WasDryRun:      req.DryRun,
-		}, nil
-	}
-
-	if err := uc.handleOutput(req, preparationResult, processingResult); err != nil {
-		return nil, err
-	}
-
-	if err := uc.handleSourceFileCleanup(req, preparationResult, processingResult); err != nil {
-		return nil, err
-	}
-
-	uc.displayResults(req, preparationResult, processingResult)
-
-	return &OrganizeFilesResponse{
-		ProcessedFiles: processingResult.fileCount,
-		TotalBlocks:    len(processingResult.allBlocks),
-		FileGroups:     len(processingResult.groups),
-		OutputDir:      preparationResult.outputDir,
-		WasDryRun:      req.DryRun,
-	}, nil
-}
-
-type preparationResult struct {
-	stat      os.FileInfo
-	outputDir string
-	cfg       *config.Config
-}
-
-type processingResult struct {
-	allBlocks     []*types.Block
-	fileCount     int
-	sourceFiles   []string
-	groups        []*types.BlockGroup
-	filesToRemove []string
-}
-
-func (uc *OrganizeFilesUsecase) prepareExecution(req *OrganizeFilesRequest) (*preparationResult, error) {
+	// 1. Prepare: input validation and config loading
 	stat, err := os.Stat(req.InputPath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to access input path: %w", err)
@@ -180,80 +126,83 @@ func (uc *OrganizeFilesUsecase) prepareExecution(req *OrganizeFilesRequest) (*pr
 		return nil, fmt.Errorf("failed to load config: %w", err)
 	}
 
-	return &preparationResult{
-		stat:      stat,
-		outputDir: outputDir,
-		cfg:       cfg,
-	}, nil
-}
-
-func (uc *OrganizeFilesUsecase) processBlocks(req *OrganizeFilesRequest, prep *preparationResult) (*processingResult, error) {
-	allBlocks, fileCount, sourceFiles, err := uc.parseInput(req.InputPath, prep.stat, req.Recursive)
+	// 2. Parse: extract blocks from files
+	parsedFiles, err := uc.parseInput(req.InputPath, stat, req.Recursive)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse input: %w", err)
 	}
 
-	if len(allBlocks) == 0 {
-		return &processingResult{
-			allBlocks:   allBlocks,
-			fileCount:   fileCount,
-			sourceFiles: sourceFiles,
+	if parsedFiles.TotalBlocks() == 0 {
+		fmt.Println("No Terraform blocks found to organize")
+		return &OrganizeFilesResponse{
+			ProcessedFiles: len(parsedFiles.Files),
+			TotalBlocks:    0,
+			FileGroups:     0,
+			OutputDir:      outputDir,
+			WasDryRun:      req.DryRun,
 		}, nil
 	}
 
-	groups := uc.groupBlocks(allBlocks, prep.cfg)
+	// 3. Group: organize blocks by type and config
+	groups, err := uc.getSplitter(cfg).GroupBlocks(parsedFiles)
+	if err != nil {
+		return nil, fmt.Errorf("failed to group blocks: %w", err)
+	}
 	fmt.Printf("Organized into %d file groups\n", len(groups))
 
-	filesToRemove := uc.getFilesToRemove(sourceFiles, groups, prep.cfg)
+	// 4. Write: output organized files
+	if err := uc.getWriter(outputDir, req.DryRun).WriteGroups(groups); err != nil {
+		return nil, fmt.Errorf("failed to write files: %w", err)
+	}
 
-	return &processingResult{
-		allBlocks:     allBlocks,
-		fileCount:     fileCount,
-		sourceFiles:   sourceFiles,
-		groups:        groups,
-		filesToRemove: filesToRemove,
+	// 5. Cleanup: handle source files if needed
+	filesToRemove := uc.getFilesToRemove(parsedFiles.FileNames(), groups, cfg)
+	if err := uc.handleSourceFileCleanup(req, stat, outputDir, filesToRemove); err != nil {
+		return nil, err
+	}
+
+	// 6. Display results
+	uc.displayResults(req, stat, outputDir, filesToRemove)
+
+	return &OrganizeFilesResponse{
+		ProcessedFiles: len(parsedFiles.Files),
+		TotalBlocks:    parsedFiles.TotalBlocks(),
+		FileGroups:     len(groups),
+		OutputDir:      outputDir,
+		WasDryRun:      req.DryRun,
 	}, nil
 }
 
-func (uc *OrganizeFilesUsecase) groupBlocks(allBlocks []*types.Block, cfg *config.Config) []*types.BlockGroup {
-	parsedFile := &types.ParsedFile{Blocks: allBlocks}
+func (uc *OrganizeFilesUsecase) getSplitter(cfg *config.Config) SplitterInterface {
 	if uc.splitter != nil {
-		return uc.splitter.GroupBlocks(parsedFile)
+		return uc.splitter
 	}
-	s := splitter.NewWithConfig(cfg)
-	return s.GroupBlocks(parsedFile)
+	return splitter.NewWithConfig(cfg)
 }
 
-func (uc *OrganizeFilesUsecase) handleOutput(req *OrganizeFilesRequest, prep *preparationResult, proc *processingResult) error {
+func (uc *OrganizeFilesUsecase) getWriter(outputDir string, dryRun bool) WriterInterface {
 	if uc.writer != nil {
-		if err := uc.writer.WriteGroups(proc.groups); err != nil {
-			return fmt.Errorf("failed to write files: %w", err)
-		}
-	} else {
-		w := writer.New(prep.outputDir, req.DryRun)
-		if err := w.WriteGroups(proc.groups); err != nil {
-			return fmt.Errorf("failed to write files: %w", err)
-		}
+		return uc.writer
 	}
-	return nil
+	return writer.New(outputDir, dryRun)
 }
 
-func (uc *OrganizeFilesUsecase) handleSourceFileCleanup(req *OrganizeFilesRequest, prep *preparationResult, proc *processingResult) error {
+func (uc *OrganizeFilesUsecase) handleSourceFileCleanup(req *OrganizeFilesRequest, stat os.FileInfo, outputDir string, filesToRemove []string) error {
 	inputDir := req.InputPath
-	if !prep.stat.IsDir() {
+	if !stat.IsDir() {
 		inputDir = filepath.Dir(req.InputPath)
 	}
-	sameDirectory := (prep.outputDir == inputDir)
+	sameDirectory := (outputDir == inputDir)
 
-	shouldProcessSourceFiles := !req.DryRun && len(proc.filesToRemove) > 0 && sameDirectory
+	shouldProcessSourceFiles := !req.DryRun && len(filesToRemove) > 0 && sameDirectory
 
 	if shouldProcessSourceFiles {
 		if req.Backup {
-			if err := uc.backupSourceFiles(proc.filesToRemove, prep.outputDir); err != nil {
+			if err := uc.backupSourceFiles(filesToRemove, outputDir); err != nil {
 				return fmt.Errorf("failed to backup source files: %w", err)
 			}
 		} else {
-			if err := uc.removeSourceFiles(proc.filesToRemove); err != nil {
+			if err := uc.removeSourceFiles(filesToRemove); err != nil {
 				return fmt.Errorf("failed to remove source files: %w", err)
 			}
 		}
@@ -262,16 +211,16 @@ func (uc *OrganizeFilesUsecase) handleSourceFileCleanup(req *OrganizeFilesReques
 	return nil
 }
 
-func (uc *OrganizeFilesUsecase) displayResults(req *OrganizeFilesRequest, prep *preparationResult, proc *processingResult) {
+func (uc *OrganizeFilesUsecase) displayResults(req *OrganizeFilesRequest, stat os.FileInfo, outputDir string, filesToRemove []string) {
 	inputDir := req.InputPath
-	if !prep.stat.IsDir() {
+	if !stat.IsDir() {
 		inputDir = filepath.Dir(req.InputPath)
 	}
-	sameDirectory := (prep.outputDir == inputDir)
-	shouldProcessSourceFiles := !req.DryRun && len(proc.filesToRemove) > 0 && sameDirectory
+	sameDirectory := (outputDir == inputDir)
+	shouldProcessSourceFiles := !req.DryRun && len(filesToRemove) > 0 && sameDirectory
 
 	if req.DryRun {
-		if sameDirectory && len(proc.filesToRemove) > 0 {
+		if sameDirectory && len(filesToRemove) > 0 {
 			if req.Backup {
 				fmt.Println("Plan completed. Use 'run --backup' to actually create files and backup source files.")
 			} else {
@@ -283,53 +232,56 @@ func (uc *OrganizeFilesUsecase) displayResults(req *OrganizeFilesRequest, prep *
 	} else {
 		if shouldProcessSourceFiles {
 			if req.Backup {
-				fmt.Printf("Successfully organized Terraform files into: %s (backed up %d source files)\n", prep.outputDir, len(proc.filesToRemove))
+				fmt.Printf("Successfully organized Terraform files into: %s (backed up %d source files)\n", outputDir, len(filesToRemove))
 			} else {
-				fmt.Printf("Successfully organized Terraform files into: %s (removed %d source files)\n", prep.outputDir, len(proc.filesToRemove))
+				fmt.Printf("Successfully organized Terraform files into: %s (removed %d source files)\n", outputDir, len(filesToRemove))
 			}
 		} else {
-			fmt.Printf("Successfully organized Terraform files into: %s\n", prep.outputDir)
+			fmt.Printf("Successfully organized Terraform files into: %s\n", outputDir)
 		}
 	}
 }
 
-func (uc *OrganizeFilesUsecase) parseInput(inputPath string, stat os.FileInfo, recursive bool) (blocks []*types.Block, fileCount int, sourceFiles []string, err error) {
+func (uc *OrganizeFilesUsecase) parseInput(inputPath string, stat os.FileInfo, recursive bool) (*types.ParsedFiles, error) {
 	if stat.IsDir() {
 		if recursive {
 			fmt.Printf("Scanning directory recursively for Terraform files: %s\n", inputPath)
 		} else {
 			fmt.Printf("Scanning directory for Terraform files: %s\n", inputPath)
 		}
-		blocks, fileCount, sourceFiles, err = uc.parseDirectory(inputPath, recursive)
+		parsedFiles, err := uc.parseDirectory(inputPath, recursive)
 		if err != nil {
-			return
+			return nil, err
 		}
-		fmt.Printf("Found %d .tf files with %d total blocks\n", fileCount, len(blocks))
+		fmt.Printf("Found %d .tf files with %d total blocks\n", len(parsedFiles.Files), parsedFiles.TotalBlocks())
+		return parsedFiles, nil
 	} else {
 		fmt.Printf("Parsing Terraform file: %s\n", inputPath)
-		parsedFile, parseErr := uc.parser.ParseFile(inputPath)
-		if parseErr != nil {
-			err = parseErr
-			return
+		parsedFile, err := uc.parser.ParseFile(inputPath)
+		if err != nil {
+			return nil, err
 		}
-		blocks = parsedFile.Blocks
-		fileCount = 1
-		sourceFiles = []string{inputPath}
-		fmt.Printf("Found %d blocks\n", len(blocks))
+		parsedFiles := &types.ParsedFiles{
+			Files: []*types.ParsedFile{parsedFile},
+		}
+		fmt.Printf("Found %d blocks\n", parsedFiles.TotalBlocks())
+		return parsedFiles, nil
 	}
-
-	return blocks, fileCount, sourceFiles, nil
 }
 
-func (uc *OrganizeFilesUsecase) parseDirectory(dirPath string, recursive bool) (blocks []*types.Block, fileCount int, sourceFiles []string, err error) {
+func (uc *OrganizeFilesUsecase) parseDirectory(dirPath string, recursive bool) (*types.ParsedFiles, error) {
 	if recursive {
 		return uc.parseDirectoryRecursive(dirPath)
 	}
 	return uc.parseDirectoryNonRecursive(dirPath)
 }
 
-func (uc *OrganizeFilesUsecase) parseDirectoryRecursive(dirPath string) (blocks []*types.Block, fileCount int, sourceFiles []string, err error) {
-	err = filepath.Walk(dirPath, func(path string, info os.FileInfo, walkErr error) error {
+func (uc *OrganizeFilesUsecase) parseDirectoryRecursive(dirPath string) (*types.ParsedFiles, error) {
+	parsedFiles := &types.ParsedFiles{
+		Files: make([]*types.ParsedFile, 0),
+	}
+
+	err := filepath.Walk(dirPath, func(path string, info os.FileInfo, walkErr error) error {
 		if walkErr != nil {
 			return walkErr
 		}
@@ -341,25 +293,28 @@ func (uc *OrganizeFilesUsecase) parseDirectoryRecursive(dirPath string) (blocks 
 		}
 
 		if !info.IsDir() && strings.HasSuffix(path, ".tf") {
-			fileBlocks, parseErr := uc.processFile(path)
+			parsedFile, parseErr := uc.parser.ParseFile(path)
 			if parseErr != nil {
+				fmt.Printf("Warning: failed to parse file %s: %v\n", path, parseErr)
 				return nil // Continue with warning only for file errors
 			}
-			blocks = append(blocks, fileBlocks...)
-			sourceFiles = append(sourceFiles, path)
-			fileCount++
+			parsedFiles.Files = append(parsedFiles.Files, parsedFile)
 		}
 
 		return nil
 	})
 
-	return blocks, fileCount, sourceFiles, err
+	return parsedFiles, err
 }
 
-func (uc *OrganizeFilesUsecase) parseDirectoryNonRecursive(dirPath string) (blocks []*types.Block, fileCount int, sourceFiles []string, err error) {
+func (uc *OrganizeFilesUsecase) parseDirectoryNonRecursive(dirPath string) (*types.ParsedFiles, error) {
+	parsedFiles := &types.ParsedFiles{
+		Files: make([]*types.ParsedFile, 0),
+	}
+
 	entries, err := os.ReadDir(dirPath)
 	if err != nil {
-		return nil, 0, nil, fmt.Errorf("failed to read directory: %w", err)
+		return nil, fmt.Errorf("failed to read directory: %w", err)
 	}
 
 	for _, entry := range entries {
@@ -379,59 +334,15 @@ func (uc *OrganizeFilesUsecase) parseDirectoryNonRecursive(dirPath string) (bloc
 			continue
 		}
 
-		fileBlocks, parseErr := uc.processFile(path)
+		parsedFile, parseErr := uc.parser.ParseFile(path)
 		if parseErr != nil {
+			fmt.Printf("Warning: failed to parse file %s: %v\n", path, parseErr)
 			continue // Continue with warning only for file errors
 		}
-		blocks = append(blocks, fileBlocks...)
-		sourceFiles = append(sourceFiles, path)
-		fileCount++
+		parsedFiles.Files = append(parsedFiles.Files, parsedFile)
 	}
 
-	return blocks, fileCount, sourceFiles, nil
-}
-
-func (uc *OrganizeFilesUsecase) processFile(path string) ([]*types.Block, error) {
-	if err := uc.validatePath(path); err != nil {
-		fmt.Printf("Warning: skipping unsafe path %s: %v\n", path, err)
-		return nil, err
-	}
-
-	parsedFile, parseErr := uc.parser.ParseFile(path)
-	if parseErr != nil {
-		fmt.Printf("Warning: failed to parse %s: %v\n", path, parseErr)
-		return nil, parseErr
-	}
-
-	fmt.Printf("  Processed: %s (%d blocks)\n", path, len(parsedFile.Blocks))
-	return parsedFile.Blocks, nil
-}
-
-// validatePath prevents path traversal attacks
-func (uc *OrganizeFilesUsecase) validatePath(path string) error {
-	if path == "" {
-		return fmt.Errorf("path cannot be empty")
-	}
-
-	cleanPath := filepath.Clean(path)
-
-	if strings.Contains(cleanPath, "..") {
-		return fmt.Errorf("path traversal detected: %s", path)
-	}
-
-	absPath, err := filepath.Abs(cleanPath)
-	if err != nil {
-		return fmt.Errorf("failed to resolve absolute path: %w", err)
-	}
-
-	systemDirs := []string{"/etc", "/bin", "/sbin", "/usr/bin", "/usr/sbin", "/sys", "/proc"}
-	for _, sysDir := range systemDirs {
-		if strings.HasPrefix(absPath, sysDir) {
-			return fmt.Errorf("access to system directory not allowed: %s", path)
-		}
-	}
-
-	return nil
+	return parsedFiles, nil
 }
 
 func (uc *OrganizeFilesUsecase) backupSourceFiles(sourceFiles []string, outputDir string) error {

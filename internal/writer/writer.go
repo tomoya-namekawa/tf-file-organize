@@ -3,6 +3,7 @@
 package writer
 
 import (
+	"bytes"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -103,6 +104,14 @@ func (w *Writer) writeGroup(group *types.BlockGroup) error {
 	content := file.Bytes()
 
 	formattedContent := hclwrite.Format(content)
+
+	// Check if file already exists with same content (for idempotency)
+	if existingContent, err := os.ReadFile(filepath.Clean(filePath)); err == nil {
+		if bytes.Equal(existingContent, formattedContent) {
+			// File already exists with same content, skip writing
+			return nil
+		}
+	}
 
 	if err := os.WriteFile(filePath, formattedContent, 0600); err != nil {
 		return fmt.Errorf("failed to write file %s: %w", filePath, err)

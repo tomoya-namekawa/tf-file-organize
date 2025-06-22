@@ -16,7 +16,40 @@ type Block struct {
 
 // ParsedFile represents a parsed Terraform file containing a collection of blocks.
 type ParsedFile struct {
-	Blocks []*Block // List of parsed blocks
+	FileName string   // Source file name
+	Blocks   []*Block // List of parsed blocks
+}
+
+// ParsedFiles represents a collection of parsed Terraform files.
+type ParsedFiles struct {
+	Files []*ParsedFile // List of parsed files
+}
+
+// AllBlocks returns all blocks from all parsed files.
+func (pf *ParsedFiles) AllBlocks() []*Block {
+	var allBlocks []*Block
+	for _, file := range pf.Files {
+		allBlocks = append(allBlocks, file.Blocks...)
+	}
+	return allBlocks
+}
+
+// FileNames returns list of all source file names.
+func (pf *ParsedFiles) FileNames() []string {
+	var names []string
+	for _, file := range pf.Files {
+		names = append(names, file.FileName)
+	}
+	return names
+}
+
+// TotalBlocks returns the total number of blocks across all files.
+func (pf *ParsedFiles) TotalBlocks() int {
+	total := 0
+	for _, file := range pf.Files {
+		total += len(file.Blocks)
+	}
+	return total
 }
 
 // BlockGroup represents a group of blocks that will be written to the same output file.

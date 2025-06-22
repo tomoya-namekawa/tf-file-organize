@@ -27,22 +27,22 @@ func (m *MockParser) ParseFile(filename string) (*types.ParsedFile, error) {
 
 // MockSplitter はSplitterのモック実装
 type MockSplitter struct {
-	groupBlocksFunc func(parsedFile *types.ParsedFile) []*types.BlockGroup
+	groupBlocksFunc func(parsedFiles *types.ParsedFiles) ([]*types.BlockGroup, error)
 }
 
-func (m *MockSplitter) GroupBlocks(parsedFile *types.ParsedFile) []*types.BlockGroup {
+func (m *MockSplitter) GroupBlocks(parsedFiles *types.ParsedFiles) ([]*types.BlockGroup, error) {
 	if m.groupBlocksFunc != nil {
-		return m.groupBlocksFunc(parsedFile)
+		return m.groupBlocksFunc(parsedFiles)
 	}
 	// デフォルトの動作
 	return []*types.BlockGroup{
 		{
 			BlockType: "resource",
 			SubType:   "aws_instance",
-			Blocks:    parsedFile.Blocks,
+			Blocks:    parsedFiles.AllBlocks(),
 			FileName:  "resource__aws_instance.tf",
 		},
-	}
+	}, nil
 }
 
 // MockWriter はWriterのモック実装

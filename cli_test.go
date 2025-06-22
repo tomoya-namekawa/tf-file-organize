@@ -248,8 +248,8 @@ resource "aws_instance" "sub_web" {
 		t.Errorf("Resource file should be created with recursive flag")
 	}
 
-	if !strings.Contains(outputStr, "modules/compute/instances.tf") {
-		t.Errorf("Sub-directory file should be processed with recursive flag")
+	if !strings.Contains(outputStr, "2 .tf files") {
+		t.Errorf("Should process both root and subdirectory files with recursive flag")
 	}
 }
 

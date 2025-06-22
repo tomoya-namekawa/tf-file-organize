@@ -48,14 +48,14 @@ data "aws_ami" "ubuntu_simple" {
 # Security group for web traffic
 resource "aws_security_group" "simple" {
   name_prefix = "simple-"
-  
+
   ingress {
     from_port   = 80
     to_port     = 80
     protocol    = "tcp"
     cidr_blocks = ["0.0.0.0/0"]
   }
-  
+
   tags = local.common_tags
 }
 
@@ -64,9 +64,9 @@ resource "aws_security_group" "simple" {
 resource "aws_instance" "simple" {
   ami           = data.aws_ami.ubuntu_simple.id
   instance_type = var.instance_type
-  
+
   vpc_security_group_ids = [aws_security_group.simple.id]
-  
+
   tags = merge(local.common_tags, {
     Name = "simple-server"
   })
