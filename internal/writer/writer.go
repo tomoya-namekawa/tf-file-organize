@@ -368,7 +368,7 @@ func (w *Writer) appendRawBlock(targetBody *hclwrite.Body, block *types.Block) {
 		},
 		&hclwrite.Token{
 			Type:  hclsyntax.TokenNewline,
-			Bytes: []byte(block.RawBody),
+			Bytes: []byte("\n" + strings.TrimSpace(block.RawBody) + "\n"),
 		},
 		&hclwrite.Token{
 			Type:  hclsyntax.TokenCBrace,
