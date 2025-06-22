@@ -173,11 +173,15 @@ The project uses GitHub Actions for continuous integration with comprehensive te
 
 **CI Pipeline** (`.github/workflows/ci.yml`):
 All tools are managed via mise for consistent environments across development and CI:
-- **workflow-lint**: Lints GitHub Actions workflows using actionlint
 - **pinact-check**: Verifies all GitHub Actions are pinned to commit hashes for security
 - **test**: Runs comprehensive test suite with race detection and coverage reporting
 - **lint**: Executes golangci-lint with multiple linters enabled (includes gosec)
 - **build**: Builds binary and verifies it works with sample inputs
+
+**Workflow Lint Pipeline** (`.github/workflows/workflow-lint.yml`):
+Runs only when GitHub Actions workflows or mise configuration changes:
+- **workflow-lint**: Lints GitHub Actions workflows using actionlint
+- Triggered by changes to `.github/**` or `.mise.toml` files
 
 **Linting Configuration** (`.golangci.yml`):
 - Comprehensive linter configuration with security-focused rules
