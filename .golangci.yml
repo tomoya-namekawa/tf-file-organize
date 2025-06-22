@@ -65,6 +65,9 @@ linters:
           - gosec
         path: testdata/
       - linters:
+          - gochecknoinits
+        path: cmd/
+      - linters:
           - dupl
           - gocyclo
         path: integration.*test\.go

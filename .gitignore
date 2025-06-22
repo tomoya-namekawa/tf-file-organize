@@ -58,3 +58,6 @@ secrets/
 # OS生成ファイル
 .DS_Store
 Thumbs.db
+
+# GoReleaser
+dist/

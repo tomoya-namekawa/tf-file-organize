@@ -243,11 +243,94 @@ mkdir -p tmp/manual-test
 ./terraform-file-organize testdata/terraform --config testdata/configs/terraform-file-organize.yaml -o tmp/config-test --dry-run
 ```
 
-## リリースプロセス
+## 開発フローとリリースプロセス
 
-1. 全テストの実行とパス確認
-2. CHANGELOG.mdの更新
-3. バージョンタグの作成
-4. GitHub Releasesでのリリース作成
+### Conventional Commitsによる開発フロー
+
+このプロジェクトはConventional Commitsとrelease-pleaseによる自動リリースを採用しています。
+
+#### コミットメッセージの形式
+
+```bash
+# 新機能の追加
+git commit -m "feat: add support for terraform modules"
+
+# バグ修正
+git commit -m "fix: resolve parsing error for nested blocks"
+
+# パフォーマンス改善
+git commit -m "perf: optimize HCL parsing performance"
+
+# リファクタリング
+git commit -m "refactor: simplify resource grouping logic"
+
+# ドキュメント更新
+git commit -m "docs: update installation instructions"
+
+# テストの追加
+git commit -m "test: add golden file tests for case4"
+
+# CI/CDの変更
+git commit -m "ci: update GitHub Actions workflow"
+
+# ビルドシステムの変更
+git commit -m "build: update go.mod dependencies"
+
+# その他の変更
+git commit -m "chore: update development documentation"
+```
+
+#### バージョンに与える影響
+
+- `feat:` → **minor** バージョンアップ (0.1.0 → 0.2.0)
+- `fix:` → **patch** バージョンアップ (0.1.0 → 0.1.1)
+- `perf:`, `refactor:`, `docs:`, `test:`, `ci:`, `build:`, `chore:` → **patch** バージョンアップ
+- `BREAKING CHANGE:` フッター → **major** バージョンアップ (0.1.0 → 1.0.0)
+
+#### 自動リリースプロセス
+
+1. **コミット**: Conventional Commitsでmainブランチにコミット
+2. **PR作成**: release-pleaseが自動でversion bump PRを作成
+3. **リリース**: PRをマージするとGoReleaserが自動実行
+4. **成果物**: GitHub Releasesにバイナリとchangelogが公開
+
+#### ブランチ戦略
+
+- **main**: 安定版ブランチ（ここへのマージでリリースPRが作成される）
+- **feature branches**: 機能開発用ブランチ
+- **release-please--branches--main--components--terraform-file-organize**: release-pleaseが自動作成するリリースPR用ブランチ
+
+### リリース設定ファイル
+
+- `.release-please-manifest.json`: 現在のバージョン管理
+- `release-please-config.json`: リリース設定
+- `.goreleaser.yaml`: バイナリビルド設定
+
+### 手動操作が必要な場合
+
+通常は自動リリースを使用しますが、以下の場合は手動操作が必要です：
+
+#### リリースPRのマージ
+
+release-pleaseが作成するPRは手動でレビュー・マージする必要があります：
+
+1. release-pleaseがPR作成（`chore(main): release v1.0.0`）
+2. PRの内容確認（CHANGELOG、バージョン更新）
+3. PRのマージ
+4. 自動でGoReleaserが実行され、リリース完了
+
+#### 緊急リリース
+
+緊急時は以下の手順でリリース可能：
+
+```bash
+# 1. 修正をコミット
+git commit -m "fix: critical security issue"
+
+# 2. release-pleaseを手動実行（GitHub Actions）
+# または以下でローカル実行
+npm install -g release-please
+release-please release-pr --repo-url=https://github.com/tomoya-namekawa/terraform-file-organize
+```
 
 このガイドに従って開発を進めることで、品質とセキュリティを保ちながら機能を拡張できます。

@@ -9,6 +9,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/tomoya-namekawa/terraform-file-organize/internal/usecase"
+	"github.com/tomoya-namekawa/terraform-file-organize/internal/version"
 )
 
 var (
@@ -20,8 +21,9 @@ var (
 )
 
 var rootCmd = &cobra.Command{
-	Use:   "terraform-file-organize <input-path>",
-	Short: "Organize Terraform files by resource type",
+	Use:     "terraform-file-organize <input-path>",
+	Short:   "Organize Terraform files by resource type",
+	Version: version.GetVersion(),
 	Long: `A CLI tool to split Terraform files into separate files organized by resource type.
 Each resource type will be placed in its own file following naming conventions.
 
@@ -42,6 +44,9 @@ func Execute() error {
 	rootCmd.Flags().StringVarP(&configFile, "config", "c", "", "Configuration file for custom grouping rules")
 	rootCmd.Flags().BoolVarP(&dryRun, "dry-run", "d", false, "Show what would be done without actually creating files")
 	rootCmd.Flags().BoolVar(&addComments, "add-comments", false, "Add descriptive comments to terraform blocks")
+
+	// Enable version flag
+	rootCmd.SetVersionTemplate("{{.Version}}\n")
 
 	return rootCmd.Execute()
 }

@@ -1,0 +1,87 @@
+version: 2
+
+project_name: terraform-file-organize
+
+before:
+  hooks:
+    - go mod tidy
+    - go test ./...
+
+builds:
+  - env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - windows
+      - darwin
+    goarch:
+      - amd64
+      - arm64
+    ldflags:
+      - -s -w
+      - -X github.com/tomoya-namekawa/terraform-file-organize/internal/version.Version={{.Version}}
+      - -X github.com/tomoya-namekawa/terraform-file-organize/internal/version.GitCommit={{.FullCommit}}
+      - -X github.com/tomoya-namekawa/terraform-file-organize/internal/version.GitTag={{.Tag}}
+      - -X github.com/tomoya-namekawa/terraform-file-organize/internal/version.BuildDate={{.Date}}
+
+archives:
+  - format: tar.gz
+    name_template: >-
+      {{ .ProjectName }}_
+      {{- title .Os }}_
+      {{- if eq .Arch "amd64" }}x86_64
+      {{- else if eq .Arch "386" }}i386
+      {{- else }}{{ .Arch }}{{ end }}
+      {{- if .Arm }}v{{ .Arm }}{{ end }}
+    format_overrides:
+      - goos: windows
+        format: zip
+
+checksum:
+  name_template: 'checksums.txt'
+
+snapshot:
+  version_template: "{{ incpatch .Version }}-next"
+
+changelog:
+  disable: true
+
+release:
+  github:
+    owner: tomoya-namekawa
+    name: terraform-file-organize
+  draft: false
+  prerelease: auto
+  mode: replace
+  header: |
+    ## What's Changed
+    
+    This release contains the following changes:
+  footer: |
+    ## Installation
+    
+    ### Go Install
+    ```bash
+    go install github.com/tomoya-namekawa/terraform-file-organize@{{ .Tag }}
+    ```
+    
+    ### Download Binary
+    Download the appropriate binary for your platform from the assets below.
+
+brews:
+  - name: terraform-file-organize
+    homepage: https://github.com/tomoya-namekawa/terraform-file-organize
+    description: "A CLI tool to organize Terraform files by resource type"
+    license: MIT
+    repository:
+      owner: tomoya-namekawa
+      name: homebrew-tap
+      branch: main
+    commit_author:
+      name: goreleaserbot
+      email: bot@goreleaser.com
+    directory: Formula
+    install: |
+      bin.install "terraform-file-organize"
+    test: |
+      system "#{bin}/terraform-file-organize", "version"

@@ -176,6 +176,53 @@ actionlint = "latest"
 pinact = "latest"
 ```
 
+## Release Process
+
+### Automated Release with Release Please
+
+The project uses Release Please for automated version management and GoReleaser for building:
+
+1. **Conventional Commits**: Use conventional commit format for automatic versioning
+   ```bash
+   git commit -m "feat: add new feature"
+   git commit -m "fix: fix critical bug"
+   git commit -m "docs: update documentation"
+   ```
+
+2. **Automatic Process**: 
+   - Release Please creates PR with version bump and changelog
+   - Merging the PR triggers automatic release and GoReleaser build
+   - Binaries are published to GitHub releases
+
+3. **Configuration Files**:
+   - `.release-please-manifest.json`: Version tracking
+   - `release-please-config.json`: Release Please configuration
+   - `.goreleaser.yaml`: GoReleaser build configuration
+
+### Manual Release Testing
+
+```bash
+# Test release build locally
+make release-snapshot
+
+# Check GoReleaser configuration
+make release-check
+```
+
+### Installation Methods
+
+After release, users can install via:
+
+```bash
+# Go install (latest)
+go install github.com/tomoya-namekawa/terraform-file-organize@latest
+
+# Go install (specific version)
+go install github.com/tomoya-namekawa/terraform-file-organize@v1.0.0
+
+# Download binary directly from GitHub releases
+```
+
 ## Development Workflow
 
 ### Pre-commit Checklist
@@ -246,6 +293,12 @@ resource "aws_instance" "web" {
   subnet_id = var.subnet_id
 }
 ```
+
+## Key Differences from Other Documentation
+
+- **README.md**: User-focused documentation in Japanese with installation instructions and basic usage examples
+- **DEVELOPMENT.md**: Comprehensive developer documentation in Japanese including detailed development workflow with Conventional Commits and release-please process
+- **CLAUDE.md**: Technical reference for Claude Code with architecture details and critical implementation information
 
 ## Best Practices
 

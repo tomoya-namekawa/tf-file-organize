@@ -24,8 +24,16 @@ Terraformファイルをリソースタイプごとに分割・整理するGoの
 ### go installを使用
 
 ```bash
+# 最新版をインストール
 go install github.com/tomoya-namekawa/terraform-file-organize@latest
+
+# 特定のバージョンをインストール
+go install github.com/tomoya-namekawa/terraform-file-organize@v1.0.0
 ```
+
+### バイナリのダウンロード
+
+[GitHub Releases](https://github.com/tomoya-namekawa/terraform-file-organize/releases) から各プラットフォーム用のバイナリをダウンロードできます。
 
 ### ソースからビルド
 
