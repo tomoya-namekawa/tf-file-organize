@@ -87,12 +87,28 @@ func TestGroupBlocksWithConfig(t *testing.T) {
 				Filename: "compute.tf",
 				Patterns: []string{"aws_instance", "aws_launch_*"},
 			},
+			{
+				Name:     "variables",
+				Filename: "vars.tf",
+				Patterns: []string{"variable"},
+			},
+			{
+				Name:     "locals",
+				Filename: "common.tf",
+				Patterns: []string{"locals"},
+			},
+			{
+				Name:     "debug_outputs",
+				Filename: "debug-outputs.tf",
+				Patterns: []string{"output.debug_*"},
+			},
+			{
+				Name:     "outputs",
+				Filename: "outputs.tf",
+				Patterns: []string{"output"},
+			},
 		},
-		Overrides: map[string]string{
-			"variable": "vars.tf",
-			"locals":   "common.tf",
-		},
-		Exclude: []string{"aws_instance_special*"},
+		ExcludeFiles: []string{"*special*.tf", "debug-*.tf"},
 	}
 
 	s := splitter.NewWithConfig(cfg)
@@ -107,6 +123,9 @@ func TestGroupBlocksWithConfig(t *testing.T) {
 			createTestBlock("resource", []string{"aws_instance", "web"}),
 			createTestBlock("resource", []string{"aws_instance_special", "admin"}),
 			createTestBlock("resource", []string{"aws_s3_bucket", "data"}),
+			// 新しいパターンマッチングのテスト用outputブロック
+			createTestBlock("output", []string{"debug_info"}), // output.debug_info -> debug-outputs.tf (ファイル除外で個別ファイルに)
+			createTestBlock("output", []string{"api_key"}),    // output.api_key -> outputs.tf
 		},
 	}
 
@@ -159,5 +178,16 @@ func TestGroupBlocksWithConfig(t *testing.T) {
 		}
 	} else {
 		t.Error("resource__aws_instance_special.tf group not found")
+	}
+
+	// ファイル除外機能の確認
+	// debug-outputs.tfが除外パターン`debug-*.tf`にマッチするため、
+	// 両方のoutputブロックが除外されて個別ファイルになる
+	if group, exists := groupsByFileName["output__debug_info.tf"]; exists {
+		if len(group.Blocks) != 2 { // debug_info + api_key (両方とも除外される)
+			t.Errorf("Expected 2 blocks in output__debug_info.tf, got %d", len(group.Blocks))
+		}
+	} else {
+		t.Error("output__debug_info.tf group not found")
 	}
 }

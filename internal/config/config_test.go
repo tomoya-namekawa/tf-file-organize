@@ -20,10 +20,8 @@ groups:
     patterns:
       - "aws_vpc"
       - "aws_subnet*"
-overrides:
-  variable: "vars.tf"
-exclude:
-  - "aws_instance_special*"
+exclude_files:
+  - "*special*.tf"
 `
 
 	err := os.WriteFile(configPath, []byte(configContent), 0644)
@@ -53,14 +51,9 @@ exclude:
 		t.Errorf("Expected 2 patterns, got %d", len(group.Patterns))
 	}
 
-	// Overrides の検証
-	if cfg.Overrides["variable"] != "vars.tf" {
-		t.Errorf("Expected override for variable to be 'vars.tf', got '%s'", cfg.Overrides["variable"])
-	}
-
-	// Exclude の検証
-	if len(cfg.Exclude) != 1 {
-		t.Errorf("Expected 1 exclude pattern, got %d", len(cfg.Exclude))
+	// ExcludeFiles の検証
+	if len(cfg.ExcludeFiles) != 1 {
+		t.Errorf("Expected 1 exclude file pattern, got %d", len(cfg.ExcludeFiles))
 	}
 }
 
@@ -130,54 +123,27 @@ func TestFindGroupForResource(t *testing.T) {
 	}
 }
 
-func TestIsExcluded(t *testing.T) {
+func TestIsFileExcluded(t *testing.T) {
 	cfg := &config.Config{
-		Exclude: []string{"aws_instance_special*", "aws_db_dev_*"},
+		ExcludeFiles: []string{"*special*.tf", "debug-*.tf"},
 	}
 
 	testCases := []struct {
-		resourceType string
-		expected     bool
+		filename string
+		expected bool
 	}{
-		{"aws_instance_special", true},
-		{"aws_instance_special_web", true},
-		{"aws_instance", false},
-		{"aws_db_dev_mysql", true},
-		{"aws_db_prod_mysql", false},
+		{"resource-special.tf", true},
+		{"special-config.tf", true},
+		{"debug-output.tf", true},
+		{"outputs.tf", false},
+		{"main.tf", false},
 	}
 
 	for _, tc := range testCases {
-		t.Run(tc.resourceType, func(t *testing.T) {
-			result := cfg.IsExcluded(tc.resourceType)
+		t.Run(tc.filename, func(t *testing.T) {
+			result := cfg.IsFileExcluded(tc.filename)
 			if result != tc.expected {
-				t.Errorf("IsExcluded(%s) = %v, expected %v", tc.resourceType, result, tc.expected)
-			}
-		})
-	}
-}
-
-func TestGetOverrideFilename(t *testing.T) {
-	cfg := &config.Config{
-		Overrides: map[string]string{
-			"variable": "vars.tf",
-			"locals":   "common.tf",
-		},
-	}
-
-	testCases := []struct {
-		blockType string
-		expected  string
-	}{
-		{"variable", "vars.tf"},
-		{"locals", "common.tf"},
-		{"output", ""}, // no override
-	}
-
-	for _, tc := range testCases {
-		t.Run(tc.blockType, func(t *testing.T) {
-			result := cfg.GetOverrideFilename(tc.blockType)
-			if result != tc.expected {
-				t.Errorf("GetOverrideFilename(%s) = %s, expected %s", tc.blockType, result, tc.expected)
+				t.Errorf("IsFileExcluded(%s) = %v, expected %v", tc.filename, result, tc.expected)
 			}
 		})
 	}
@@ -193,7 +159,7 @@ func TestPatternMatching(t *testing.T) {
 				Patterns: []string{"aws_s3_*", "*_bucket"},
 			},
 		},
-		Exclude: []string{"aws_instance_special*", "*_test"},
+		ExcludeFiles: []string{"*special*.tf", "*test*.tf"},
 	}
 
 	// グループマッチングのテスト
@@ -216,25 +182,138 @@ func TestPatternMatching(t *testing.T) {
 			}
 		})
 	}
+}
 
-	// 除外パターンのテスト
-	excludeTestCases := []struct {
-		resourceType  string
-		shouldExclude bool
+func TestValidateConfigFields(t *testing.T) {
+	tests := []struct {
+		name          string
+		configYAML    string
+		expectError   bool
+		errorContains string
 	}{
-		{"aws_instance_special", true},
-		{"aws_instance_special_web", true},
-		{"database_test", true},
-		{"aws_instance", false},
-		{"database_prod", false},
+		{
+			name: "valid configuration",
+			configYAML: `
+groups:
+  - name: "compute"
+    filename: "compute.tf"
+    patterns:
+      - "aws_instance"
+exclude_files:
+  - "*.backup"
+`,
+			expectError: false,
+		},
+		{
+			name: "deprecated exclude field",
+			configYAML: `
+groups:
+  - name: "compute"
+    filename: "compute.tf"
+    patterns:
+      - "aws_instance"
+exclude:
+  - "*.backup"
+`,
+			expectError:   true,
+			errorContains: "deprecated fields found: 'exclude' (use 'exclude_files' instead)",
+		},
+		{
+			name: "unknown top-level field",
+			configYAML: `
+groups:
+  - name: "compute"
+    filename: "compute.tf"
+    patterns:
+      - "aws_instance"
+unknown_field: "value"
+`,
+			expectError:   true,
+			errorContains: "unknown fields found: 'unknown_field'",
+		},
+		{
+			name: "invalid group field",
+			configYAML: `
+groups:
+  - name: "compute"
+    filename: "compute.tf"
+    patterns:
+      - "aws_instance"
+    priority: "high"
+exclude_files:
+  - "*.backup"
+`,
+			expectError:   true,
+			errorContains: "unknown fields found: 'priority' in group 1",
+		},
+		{
+			name: "multiple invalid fields",
+			configYAML: `
+groups:
+  - name: "compute"
+    filename: "compute.tf"
+    patterns:
+      - "aws_instance"
+    invalid1: "value"
+    invalid2: "value"
+exclude:
+  - "*.backup"
+unknown_top: "value"
+`,
+			expectError:   true,
+			errorContains: "deprecated fields found:",
+		},
+		{
+			name: "deprecated overrides field",
+			configYAML: `
+groups:
+  - name: "compute"
+    filename: "compute.tf"
+    patterns:
+      - "aws_instance"
+overrides:
+  variable: "vars.tf"
+`,
+			expectError:   true,
+			errorContains: "deprecated fields found: 'overrides' (no longer supported)",
+		},
 	}
 
-	for _, tc := range excludeTestCases {
-		t.Run("Exclude_"+tc.resourceType, func(t *testing.T) {
-			result := cfg.IsExcluded(tc.resourceType)
-			if result != tc.shouldExclude {
-				t.Errorf("Exclude pattern for %s: got %v, expected %v", tc.resourceType, result, tc.shouldExclude)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tmpDir := t.TempDir()
+			configPath := filepath.Join(tmpDir, "test-config.yaml")
+
+			err := os.WriteFile(configPath, []byte(tt.configYAML), 0644)
+			if err != nil {
+				t.Fatalf("Failed to create test config file: %v", err)
+			}
+
+			_, err = config.LoadConfig(configPath)
+
+			if tt.expectError {
+				if err == nil {
+					t.Errorf("Expected error but got none")
+				} else if !containsString(err.Error(), tt.errorContains) {
+					t.Errorf("Expected error to contain '%s', but got: %s", tt.errorContains, err.Error())
+				}
+			} else {
+				if err != nil {
+					t.Errorf("Expected no error but got: %v", err)
+				}
 			}
 		})
 	}
+}
+
+func containsString(haystack, needle string) bool {
+	if len(needle) == 0 {
+		return true
+	}
+	for i := 0; i <= len(haystack)-len(needle); i++ {
+		if haystack[i:i+len(needle)] == needle {
+			return true
+		}
+	}
+	return false
 }

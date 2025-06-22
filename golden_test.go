@@ -65,7 +65,7 @@ func TestGoldenFiles(t *testing.T) {
 			// 設定ファイルのパスを決定
 			configPath := filepath.Join(caseDir, "terraform-file-organize.yaml")
 			var args []string
-			args = append(args, inputDir, "--output-dir", actualDir)
+			args = append(args, "run", inputDir, "--output-dir", actualDir)
 			if _, statErr := os.Stat(configPath); statErr == nil {
 				args = append(args, "--config", configPath)
 			}
@@ -212,7 +212,7 @@ func BenchmarkFileProcessing(b *testing.B) {
 		_ = os.MkdirAll(outputDir, 0755)
 
 		// CLIバイナリ経由でファイル処理
-		cmd := exec.Command(binary, inputDir, "--output-dir", outputDir)
+		cmd := exec.Command(binary, "run", inputDir, "--output-dir", outputDir)
 		_, err := cmd.CombinedOutput()
 		if err != nil {
 			b.Fatalf("Failed to process directory: %v", err)

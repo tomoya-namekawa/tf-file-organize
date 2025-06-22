@@ -64,7 +64,7 @@ output "instance_id" {
 	}
 
 	// CLIを実行
-	cmd = exec.Command(binary, inputFile, "--output-dir", outputDir)
+	cmd = exec.Command(binary, "run", inputFile, "--output-dir", outputDir)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		t.Fatalf("CLI execution failed: %v\nOutput: %s", err, output)
@@ -86,9 +86,9 @@ output "instance_id" {
 	}
 }
 
-func TestCLIDryRun(t *testing.T) {
+func TestCLIPlan(t *testing.T) {
 	// テスト用ディレクトリを作成
-	testDir := createTestDir(t, "dryrun")
+	testDir := createTestDir(t, "plan")
 
 	binary := filepath.Join(testDir, "terraform-file-organize")
 	cmd := exec.Command("go", "build", "-o", binary)
@@ -111,8 +111,8 @@ resource "aws_instance" "web" {
 		t.Fatalf("Failed to create test file: %v", err)
 	}
 
-	// dry runでCLIを実行
-	cmd = exec.Command(binary, inputFile, "--output-dir", outputDir, "--dry-run")
+	// planサブコマンドでCLIを実行
+	cmd = exec.Command(binary, "plan", inputFile, "--output-dir", outputDir)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		t.Fatalf("CLI execution failed: %v\nOutput: %s", err, output)
@@ -120,12 +120,12 @@ resource "aws_instance" "web" {
 
 	// "Would create file" メッセージが含まれることを確認
 	if !strings.Contains(string(output), "Would create file") {
-		t.Errorf("Expected dry run output, got: %s", output)
+		t.Errorf("Expected plan output, got: %s", output)
 	}
 
 	// 実際のファイルは作成されていないことを確認
 	if _, err := os.Stat(outputDir); !os.IsNotExist(err) {
-		t.Errorf("Output directory should not exist in dry run")
+		t.Errorf("Output directory should not exist in plan mode")
 	}
 }
 
@@ -177,7 +177,7 @@ resource "aws_instance" "web2" {
 	}
 
 	// ディレクトリ入力でCLIを実行（非再帰的）
-	cmd = exec.Command(binary, inputDir, "--output-dir", outputDir)
+	cmd = exec.Command(binary, "run", inputDir, "--output-dir", outputDir)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		t.Fatalf("CLI execution failed: %v\nOutput: %s", err, output)
@@ -249,13 +249,13 @@ resource "aws_instance" "sub_web" {
 	}
 
 	// 再帰的フラグなしでCLIを実行（inputDirに直接出力）
-	cmd = exec.Command(binary, inputDir, "--dry-run")
+	cmd = exec.Command(binary, "plan", inputDir)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		t.Fatalf("CLI execution failed: %v\nOutput: %s", err, output)
 	}
 
-	// サブディレクトリのファイルは処理されないはず（dry-runなので出力メッセージで確認）
+	// サブディレクトリのファイルは処理されないはず（planなので出力メッセージで確認）
 	outputStr := string(output)
 	if strings.Contains(outputStr, "sub_web") {
 		t.Errorf("Sub-directory files should not be processed without recursive flag")
@@ -267,7 +267,7 @@ resource "aws_instance" "sub_web" {
 	}
 
 	// 再帰的フラグありでCLIを実行
-	cmd = exec.Command(binary, inputDir, "--recursive", "--dry-run")
+	cmd = exec.Command(binary, "plan", inputDir, "--recursive")
 	output, err = cmd.CombinedOutput()
 	if err != nil {
 		t.Fatalf("CLI execution failed with recursive flag: %v\nOutput: %s", err, output)
@@ -335,7 +335,7 @@ groups:
 	}
 
 	// 設定ファイルを指定してCLIを実行
-	cmd = exec.Command(binary, inputFile, "--config", configFile, "--output-dir", outputDir)
+	cmd = exec.Command(binary, "run", inputFile, "--config", configFile, "--output-dir", outputDir)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		t.Fatalf("CLI execution failed: %v\nOutput: %s", err, output)
@@ -387,8 +387,11 @@ variable "name" {
 `
 
 	configContent := `
-overrides:
-  variable: "custom-vars.tf"
+groups:
+  - name: "variables"
+    filename: "custom-vars.tf"
+    patterns:
+      - "variable"
 `
 
 	err = os.WriteFile(inputFile, []byte(tfContent), 0644)
@@ -417,7 +420,7 @@ overrides:
 		t.Fatalf("Failed to get absolute path for binary: %v", err)
 	}
 
-	cmd = exec.Command(absBinary, absInputFile, "--output-dir", absOutputDir)
+	cmd = exec.Command(absBinary, "run", absInputFile, "--output-dir", absOutputDir)
 	cmd.Dir = testDir // 作業ディレクトリを設定
 	output, err := cmd.CombinedOutput()
 	if err != nil {
@@ -449,7 +452,7 @@ func TestCLIErrorHandling(t *testing.T) {
 
 	// 存在しないファイルを指定（プロジェクト内の存在しないパス）
 	nonexistentFile := filepath.Join(testDir, "nonexistent", "file.tf")
-	cmd = exec.Command(binary, nonexistentFile)
+	cmd = exec.Command(binary, "run", nonexistentFile)
 	output, err := cmd.CombinedOutput()
 	if err == nil {
 		t.Errorf("Expected error for nonexistent file, got none")
@@ -459,8 +462,8 @@ func TestCLIErrorHandling(t *testing.T) {
 		t.Errorf("Expected 'does not exist' error message, got: %s", output)
 	}
 
-	// 引数なしで実行
-	cmd = exec.Command(binary)
+	// 引数なしで実行（runサブコマンドのみ）
+	cmd = exec.Command(binary, "run")
 	_, err = cmd.CombinedOutput()
 	if err == nil {
 		t.Errorf("Expected error for missing arguments, got none")
@@ -480,7 +483,7 @@ func TestCLIErrorHandling(t *testing.T) {
 		t.Fatalf("Failed to create invalid config: %v", err)
 	}
 
-	cmd = exec.Command(binary, inputFile, "--config", invalidConfigFile)
+	cmd = exec.Command(binary, "run", inputFile, "--config", invalidConfigFile)
 	output, err = cmd.CombinedOutput()
 	if err == nil {
 		t.Errorf("Expected error for invalid config, got none")
@@ -522,7 +525,7 @@ variable "test" {
 	}
 
 	// -o と -r を同時に指定してエラーになることを確認
-	cmd = exec.Command(binary, inputDir, "--output-dir", outputDir, "--recursive")
+	cmd = exec.Command(binary, "run", inputDir, "--output-dir", outputDir, "--recursive")
 	output, err := cmd.CombinedOutput()
 	if err == nil {
 		t.Errorf("Expected error when using -o and -r together, got none")
