@@ -7,10 +7,10 @@ import (
 	"sort"
 
 	"github.com/hashicorp/hcl/v2"
-	"github.com/hashicorp/hcl/v2/hclwrite"
 	"github.com/hashicorp/hcl/v2/hclsyntax"
-	"github.com/zclconf/go-cty/cty"
+	"github.com/hashicorp/hcl/v2/hclwrite"
 	"github.com/tomoya-namekawa/terraform-file-organize/pkg/types"
+	"github.com/zclconf/go-cty/cty"
 )
 
 type Writer struct {
@@ -43,7 +43,7 @@ func (w *Writer) WriteGroups(groups []*types.BlockGroup) error {
 
 func (w *Writer) writeGroup(group *types.BlockGroup) error {
 	filepath := filepath.Join(w.outputDir, group.FileName)
-	
+
 	if w.dryRun {
 		fmt.Printf("Would create file: %s\n", filepath)
 		fmt.Printf("  Block type: %s\n", group.BlockType)
@@ -64,17 +64,17 @@ func (w *Writer) writeGroup(group *types.BlockGroup) error {
 		}
 
 		newBlock := rootBody.AppendNewBlock(block.Type, block.Labels)
-		
+
 		if err := w.copyBlockBody(block.Body, newBlock.Body()); err != nil {
 			return fmt.Errorf("failed to copy block body: %w", err)
 		}
 	}
 
 	content := file.Bytes()
-	
+
 	// hclwrite.Formatを使用してフォーマット
 	formattedContent := hclwrite.Format(content)
-	
+
 	if err := os.WriteFile(filepath, formattedContent, 0644); err != nil {
 		return fmt.Errorf("failed to write file %s: %w", filepath, err)
 	}
@@ -96,7 +96,7 @@ func (w *Writer) copyFromSyntaxBody(syntaxBody *hclsyntax.Body, targetBody *hclw
 		attrNames = append(attrNames, name)
 	}
 	sort.Strings(attrNames)
-	
+
 	// ソートされた順序で属性を直接コピー
 	for _, name := range attrNames {
 		attr := syntaxBody.Attributes[name]
@@ -141,13 +141,13 @@ func (w *Writer) setAttributeFromExpr(targetBody *hclwrite.Body, name string, ex
 		// 配列の場合、適切に処理
 		var tokens hclwrite.Tokens
 		tokens = append(tokens, &hclwrite.Token{Type: hclsyntax.TokenOBrack, Bytes: []byte("[")})
-		
+
 		for i, subExpr := range e.Exprs {
 			if i > 0 {
 				tokens = append(tokens, &hclwrite.Token{Type: hclsyntax.TokenComma, Bytes: []byte(",")})
 				tokens = append(tokens, &hclwrite.Token{Type: hclsyntax.TokenNewline, Bytes: []byte(" ")})
 			}
-			
+
 			switch se := subExpr.(type) {
 			case *hclsyntax.ScopeTraversalExpr:
 				tokens = append(tokens, hclwrite.TokensForTraversal(se.Traversal)...)
@@ -157,7 +157,7 @@ func (w *Writer) setAttributeFromExpr(targetBody *hclwrite.Body, name string, ex
 				tokens = append(tokens, hclwrite.TokensForValue(cty.StringVal(""))...)
 			}
 		}
-		
+
 		tokens = append(tokens, &hclwrite.Token{Type: hclsyntax.TokenCBrack, Bytes: []byte("]")})
 		targetBody.SetAttributeRaw(name, tokens)
 	case *hclsyntax.ScopeTraversalExpr:
@@ -182,7 +182,7 @@ func (w *Writer) copyBlockBodyGeneric(sourceBody hcl.Body, targetBody *hclwrite.
 		Blocks: []hcl.BlockHeaderSchema{
 			{Type: "filter"},
 			{Type: "ingress"},
-			{Type: "egress"}, 
+			{Type: "egress"},
 			{Type: "lifecycle"},
 			{Type: "provisioner", LabelNames: []string{"type"}},
 			{Type: "connection"},
@@ -201,14 +201,14 @@ func (w *Writer) copyBlockBodyGeneric(sourceBody hcl.Body, targetBody *hclwrite.
 
 	// まず全ての属性を取得してアルファベット順でソートしてコピー
 	allAttrs, _ := sourceBody.JustAttributes()
-	
+
 	// 属性名をソートして決定的な順序にする
 	var attrNames []string
 	for name := range allAttrs {
 		attrNames = append(attrNames, name)
 	}
 	sort.Strings(attrNames)
-	
+
 	// ソートされた順序で属性をコピー
 	for _, name := range attrNames {
 		attr := allAttrs[name]
@@ -253,4 +253,3 @@ func convertToStrings(values []interface{}) []string {
 	}
 	return result
 }
-

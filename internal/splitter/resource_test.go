@@ -18,7 +18,7 @@ func createTestBlock(blockType string, labels []string) *types.Block {
 func TestGroupBlocksDefault(t *testing.T) {
 	// デフォルト設定でのテスト
 	s := splitter.New()
-	
+
 	parsedFile := &types.ParsedFile{
 		Blocks: []*types.Block{
 			createTestBlock("terraform", nil),
@@ -33,21 +33,21 @@ func TestGroupBlocksDefault(t *testing.T) {
 			createTestBlock("output", []string{"instance_id"}),
 		},
 	}
-	
+
 	groups := s.GroupBlocks(parsedFile)
-	
+
 	// グループ数の検証
 	expectedGroups := 9 // terraform, providers, variables, locals, resource__aws_instance, resource__aws_s3_bucket, data__aws_ami, module__vpc, outputs
 	if len(groups) != expectedGroups {
 		t.Errorf("Expected %d groups, got %d", expectedGroups, len(groups))
 	}
-	
+
 	// 特定のグループの検証
 	groupsByFileName := make(map[string]*types.BlockGroup)
 	for _, group := range groups {
 		groupsByFileName[group.FileName] = group
 	}
-	
+
 	// variables.tf に2つのvariableブロックが含まれることを確認
 	if group, exists := groupsByFileName["variables.tf"]; exists {
 		if len(group.Blocks) != 2 {
@@ -56,7 +56,7 @@ func TestGroupBlocksDefault(t *testing.T) {
 	} else {
 		t.Error("variables.tf group not found")
 	}
-	
+
 	// resource__aws_instance.tf に1つのリソースブロックが含まれることを確認
 	if group, exists := groupsByFileName["resource__aws_instance.tf"]; exists {
 		if len(group.Blocks) != 1 {
@@ -94,9 +94,9 @@ func TestGroupBlocksWithConfig(t *testing.T) {
 		},
 		Exclude: []string{"aws_instance_special*"},
 	}
-	
+
 	s := splitter.NewWithConfig(cfg)
-	
+
 	parsedFile := &types.ParsedFile{
 		Blocks: []*types.Block{
 			createTestBlock("variable", []string{"instance_type"}),
@@ -109,14 +109,14 @@ func TestGroupBlocksWithConfig(t *testing.T) {
 			createTestBlock("resource", []string{"aws_s3_bucket", "data"}),
 		},
 	}
-	
+
 	groups := s.GroupBlocks(parsedFile)
-	
+
 	groupsByFileName := make(map[string]*types.BlockGroup)
 	for _, group := range groups {
 		groupsByFileName[group.FileName] = group
 	}
-	
+
 	// オーバーライドされたファイル名の確認
 	if group, exists := groupsByFileName["vars.tf"]; exists {
 		if len(group.Blocks) != 1 {
@@ -125,7 +125,7 @@ func TestGroupBlocksWithConfig(t *testing.T) {
 	} else {
 		t.Error("vars.tf group not found")
 	}
-	
+
 	if group, exists := groupsByFileName["common.tf"]; exists {
 		if len(group.Blocks) != 1 {
 			t.Errorf("Expected 1 block in common.tf, got %d", len(group.Blocks))
@@ -133,7 +133,7 @@ func TestGroupBlocksWithConfig(t *testing.T) {
 	} else {
 		t.Error("common.tf group not found")
 	}
-	
+
 	// ネットワークグループの確認
 	if group, exists := groupsByFileName["network.tf"]; exists {
 		if len(group.Blocks) != 3 { // aws_vpc, aws_subnet, aws_security_group
@@ -142,7 +142,7 @@ func TestGroupBlocksWithConfig(t *testing.T) {
 	} else {
 		t.Error("network.tf group not found")
 	}
-	
+
 	// コンピュートグループの確認
 	if group, exists := groupsByFileName["compute.tf"]; exists {
 		if len(group.Blocks) != 1 { // aws_instance (excluding aws_instance_special)
@@ -151,7 +151,7 @@ func TestGroupBlocksWithConfig(t *testing.T) {
 	} else {
 		t.Error("compute.tf group not found")
 	}
-	
+
 	// 除外されたリソースが個別ファイルになることを確認
 	if group, exists := groupsByFileName["resource__aws_instance_special.tf"]; exists {
 		if len(group.Blocks) != 1 {
@@ -161,4 +161,3 @@ func TestGroupBlocksWithConfig(t *testing.T) {
 		t.Error("resource__aws_instance_special.tf group not found")
 	}
 }
-

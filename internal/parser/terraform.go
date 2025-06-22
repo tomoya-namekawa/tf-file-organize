@@ -50,7 +50,7 @@ func (p *Parser) ParseFile(filename string) (*types.ParsedFile, error) {
 			{Type: "output", LabelNames: []string{"name"}},
 		},
 	}
-	
+
 	content_hcl, _, diags := file.Body.PartialContent(schema)
 	if diags.HasErrors() {
 		return nil, fmt.Errorf("failed to extract content: %s", diags.Error())

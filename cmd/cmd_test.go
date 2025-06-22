@@ -21,7 +21,7 @@ func buildTestBinary(t *testing.T) string {
 
 func TestCLISingleFile(t *testing.T) {
 	binary := buildTestBinary(t)
-	
+
 	tmpDir := t.TempDir()
 	inputFile := filepath.Join(tmpDir, "main.tf")
 	outputDir := filepath.Join(tmpDir, "output")
@@ -69,7 +69,7 @@ resource "aws_instance" "web" {
 
 func TestCLIDirectory(t *testing.T) {
 	binary := buildTestBinary(t)
-	
+
 	tmpDir := t.TempDir()
 	inputDir := filepath.Join(tmpDir, "terraform")
 	outputDir := filepath.Join(tmpDir, "output")
@@ -117,7 +117,7 @@ resource "aws_s3_bucket" "data" {
 
 	expectedFiles := []string{
 		"variables.tf",
-		"providers.tf", 
+		"providers.tf",
 		"resource__aws_instance.tf",
 		"resource__aws_s3_bucket.tf",
 	}
@@ -132,7 +132,7 @@ resource "aws_s3_bucket" "data" {
 
 func TestCLIDryRun(t *testing.T) {
 	binary := buildTestBinary(t)
-	
+
 	tmpDir := t.TempDir()
 	inputFile := filepath.Join(tmpDir, "main.tf")
 	outputDir := filepath.Join(tmpDir, "output")
@@ -165,7 +165,7 @@ resource "aws_instance" "web" {
 
 func TestCLIWithConfig(t *testing.T) {
 	binary := buildTestBinary(t)
-	
+
 	tmpDir := t.TempDir()
 	inputFile := filepath.Join(tmpDir, "main.tf")
 	configFile := filepath.Join(tmpDir, "config.yaml")
@@ -226,7 +226,7 @@ groups:
 		t.Errorf("infrastructure.tf does not contain aws_vpc")
 	}
 	if !strings.Contains(contentStr, `"aws_subnet"`) {
-		t.Errorf("infrastructure.tf does not contain aws_subnet") 
+		t.Errorf("infrastructure.tf does not contain aws_subnet")
 	}
 	if !strings.Contains(contentStr, `"aws_instance"`) {
 		t.Errorf("infrastructure.tf does not contain aws_instance")
@@ -235,7 +235,7 @@ groups:
 
 func TestCLIErrorHandling(t *testing.T) {
 	binary := buildTestBinary(t)
-	
+
 	// 存在しないファイルを指定
 	cmd := exec.Command(binary, "/nonexistent/file.tf")
 	output, err := cmd.CombinedOutput()

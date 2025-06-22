@@ -10,9 +10,9 @@ import (
 )
 
 type Config struct {
-	Groups    []GroupConfig            `yaml:"groups"`
-	Overrides map[string]string        `yaml:"overrides"`
-	Exclude   []string                 `yaml:"exclude"`
+	Groups    []GroupConfig     `yaml:"groups"`
+	Overrides map[string]string `yaml:"overrides"`
+	Exclude   []string          `yaml:"exclude"`
 }
 
 type GroupConfig struct {
@@ -76,20 +76,20 @@ func validateConfig(config *Config) error {
 		if group.Name == "" {
 			return fmt.Errorf("group %d: name cannot be empty", i)
 		}
-		
+
 		if group.Filename == "" {
 			return fmt.Errorf("group %d (%s): filename cannot be empty", i, group.Name)
 		}
-		
+
 		// ファイル名のセキュリティ検証
 		if err := validateFilename(group.Filename); err != nil {
 			return fmt.Errorf("group %d (%s): invalid filename: %w", i, group.Name, err)
 		}
-		
+
 		if len(group.Patterns) == 0 {
 			return fmt.Errorf("group %d (%s): at least one pattern is required", i, group.Name)
 		}
-		
+
 		// パターンの検証
 		for j, pattern := range group.Patterns {
 			if pattern == "" {
@@ -132,37 +132,37 @@ func validateFilename(filename string) error {
 	if filename == "" {
 		return fmt.Errorf("filename cannot be empty")
 	}
-	
+
 	// 基本的な文字チェック
 	if strings.Contains(filename, "..") {
 		return fmt.Errorf("filename cannot contain '..'")
 	}
-	
+
 	if strings.ContainsAny(filename, "/\\:*?\"<>|") {
 		return fmt.Errorf("filename contains invalid characters")
 	}
-	
+
 	// 長さ制限
 	if len(filename) > 255 {
 		return fmt.Errorf("filename too long (max 255 chars)")
 	}
-	
+
 	// システムファイル名のチェック
-	systemNames := []string{"CON", "PRN", "AUX", "NUL", "COM1", "COM2", "COM3", "COM4", 
-						  "COM5", "COM6", "COM7", "COM8", "COM9", "LPT1", "LPT2", 
-						  "LPT3", "LPT4", "LPT5", "LPT6", "LPT7", "LPT8", "LPT9"}
-	
+	systemNames := []string{"CON", "PRN", "AUX", "NUL", "COM1", "COM2", "COM3", "COM4",
+		"COM5", "COM6", "COM7", "COM8", "COM9", "LPT1", "LPT2",
+		"LPT3", "LPT4", "LPT5", "LPT6", "LPT7", "LPT8", "LPT9"}
+
 	nameWithoutExt := strings.ToUpper(filename)
 	if idx := strings.LastIndex(nameWithoutExt, "."); idx != -1 {
 		nameWithoutExt = nameWithoutExt[:idx]
 	}
-	
+
 	for _, sysName := range systemNames {
 		if nameWithoutExt == sysName {
 			return fmt.Errorf("filename cannot be a system reserved name: %s", filename)
 		}
 	}
-	
+
 	return nil
 }
 

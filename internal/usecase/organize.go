@@ -114,7 +114,7 @@ func (uc *OrganizeFilesUsecase) loadConfig(configFile string) (*config.Config, e
 		fmt.Printf("Loading configuration from: %s\n", configFile)
 		return config.LoadConfig(configFile)
 	}
-	
+
 	// 設定ファイルが指定されていない場合はデフォルトを探す
 	defaultConfigs := []string{
 		"terraform-file-organize.yaml",
@@ -208,21 +208,21 @@ func (uc *OrganizeFilesUsecase) validatePath(path string) error {
 	if path == "" {
 		return fmt.Errorf("path cannot be empty")
 	}
-	
+
 	// パスを正規化
 	cleanPath := filepath.Clean(path)
-	
+
 	// パストラバーサル攻撃をチェック
 	if strings.Contains(cleanPath, "..") {
 		return fmt.Errorf("path traversal detected: %s", path)
 	}
-	
+
 	// 絶対パスに変換して曖昧さを排除
 	absPath, err := filepath.Abs(cleanPath)
 	if err != nil {
 		return fmt.Errorf("failed to resolve absolute path: %w", err)
 	}
-	
+
 	// システムディレクトリへのアクセスを防ぐ
 	systemDirs := []string{"/etc", "/bin", "/sbin", "/usr/bin", "/usr/sbin", "/sys", "/proc"}
 	for _, sysDir := range systemDirs {
@@ -230,6 +230,6 @@ func (uc *OrganizeFilesUsecase) validatePath(path string) error {
 			return fmt.Errorf("access to system directory not allowed: %s", path)
 		}
 	}
-	
+
 	return nil
 }

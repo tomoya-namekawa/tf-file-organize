@@ -23,7 +23,7 @@ func TestGoldenFiles(t *testing.T) {
 			description: "Single file with basic Terraform blocks (default config)",
 		},
 		{
-			name:        "case2", 
+			name:        "case2",
 			description: "Multiple files with same resource types (basic grouping)",
 		},
 		{
@@ -46,21 +46,21 @@ func TestGoldenFiles(t *testing.T) {
 
 			// ファイル分割の実行（usecaseを使用）
 			uc := usecase.NewOrganizeFilesUsecase()
-			
+
 			// 設定ファイルのパスを決定
 			configPath := filepath.Join(caseDir, "terraform-file-organize.yaml")
 			var configFilePath string
 			if _, statErr := os.Stat(configPath); statErr == nil {
 				configFilePath = configPath
 			}
-			
+
 			req := &usecase.OrganizeFilesRequest{
 				InputPath:  inputDir,
 				OutputDir:  actualDir,
 				ConfigFile: configFilePath,
 				DryRun:     false,
 			}
-			
+
 			_, err := uc.Execute(req)
 			if err != nil {
 				t.Fatalf("Failed to process directory: %v", err)
@@ -73,7 +73,6 @@ func TestGoldenFiles(t *testing.T) {
 		})
 	}
 }
-
 
 // compareDirectories は2つのディレクトリの内容を比較
 func compareDirectories(t *testing.T, expectedDir, actualDir string) error {
@@ -161,12 +160,12 @@ func normalizeContent(content string) string {
 	// 改行コードを統一
 	content = strings.ReplaceAll(content, "\r\n", "\n")
 	content = strings.ReplaceAll(content, "\r", "\n")
-	
+
 	// 連続する空行を単一にする
 	lines := strings.Split(content, "\n")
 	var normalizedLines []string
 	var lastLineEmpty bool
-	
+
 	for _, line := range lines {
 		line = strings.TrimSpace(line)
 		if line == "" {
@@ -179,7 +178,7 @@ func normalizeContent(content string) string {
 			lastLineEmpty = false
 		}
 	}
-	
+
 	return strings.Join(normalizedLines, "\n")
 }
 
@@ -187,21 +186,21 @@ func normalizeContent(content string) string {
 func BenchmarkFileProcessing(b *testing.B) {
 	inputDir := "testdata/integration/case1/input"
 	outputDir := filepath.Join("tmp", "benchmark-test")
-	
+
 	uc := usecase.NewOrganizeFilesUsecase()
-	
+
 	for i := 0; i < b.N; i++ {
 		// 出力ディレクトリをクリア
 		os.RemoveAll(outputDir)
 		os.MkdirAll(outputDir, 0755)
-		
+
 		req := &usecase.OrganizeFilesRequest{
 			InputPath:  inputDir,
 			OutputDir:  outputDir,
 			ConfigFile: "", // デフォルト設定を使用
 			DryRun:     false,
 		}
-		
+
 		_, err := uc.Execute(req)
 		if err != nil {
 			b.Fatalf("Failed to process directory: %v", err)

@@ -12,7 +12,7 @@ func TestLoadConfig(t *testing.T) {
 	// テスト用の一時設定ファイルを作成
 	tmpDir := t.TempDir()
 	configPath := filepath.Join(tmpDir, "test-config.yaml")
-	
+
 	configContent := `
 groups:
   - name: "network"
@@ -25,23 +25,23 @@ overrides:
 exclude:
   - "aws_instance_special*"
 `
-	
+
 	err := os.WriteFile(configPath, []byte(configContent), 0644)
 	if err != nil {
 		t.Fatalf("Failed to create test config file: %v", err)
 	}
-	
+
 	// 設定ファイルを読み込み
 	cfg, err := config.LoadConfig(configPath)
 	if err != nil {
 		t.Fatalf("LoadConfig failed: %v", err)
 	}
-	
+
 	// Groups の検証
 	if len(cfg.Groups) != 1 {
 		t.Errorf("Expected 1 group, got %d", len(cfg.Groups))
 	}
-	
+
 	group := cfg.Groups[0]
 	if group.Name != "network" {
 		t.Errorf("Expected group name 'network', got '%s'", group.Name)
@@ -52,12 +52,12 @@ exclude:
 	if len(group.Patterns) != 2 {
 		t.Errorf("Expected 2 patterns, got %d", len(group.Patterns))
 	}
-	
+
 	// Overrides の検証
 	if cfg.Overrides["variable"] != "vars.tf" {
 		t.Errorf("Expected override for variable to be 'vars.tf', got '%s'", cfg.Overrides["variable"])
 	}
-	
+
 	// Exclude の検証
 	if len(cfg.Exclude) != 1 {
 		t.Errorf("Expected 1 exclude pattern, got %d", len(cfg.Exclude))
@@ -69,7 +69,7 @@ func TestLoadConfigEmptyPath(t *testing.T) {
 	if err != nil {
 		t.Fatalf("LoadConfig with empty path should not fail: %v", err)
 	}
-	
+
 	if len(cfg.Groups) != 0 {
 		t.Errorf("Expected empty config, got %d groups", len(cfg.Groups))
 	}
@@ -97,7 +97,7 @@ func TestFindGroupForResource(t *testing.T) {
 			},
 		},
 	}
-	
+
 	testCases := []struct {
 		resourceType string
 		expectedName string
@@ -111,7 +111,7 @@ func TestFindGroupForResource(t *testing.T) {
 		{"aws_launch_template", "compute"},
 		{"aws_s3_bucket", ""}, // no match
 	}
-	
+
 	for _, tc := range testCases {
 		t.Run(tc.resourceType, func(t *testing.T) {
 			group := cfg.FindGroupForResource(tc.resourceType)
@@ -134,7 +134,7 @@ func TestIsExcluded(t *testing.T) {
 	cfg := &config.Config{
 		Exclude: []string{"aws_instance_special*", "aws_db_dev_*"},
 	}
-	
+
 	testCases := []struct {
 		resourceType string
 		expected     bool
@@ -145,7 +145,7 @@ func TestIsExcluded(t *testing.T) {
 		{"aws_db_dev_mysql", true},
 		{"aws_db_prod_mysql", false},
 	}
-	
+
 	for _, tc := range testCases {
 		t.Run(tc.resourceType, func(t *testing.T) {
 			result := cfg.IsExcluded(tc.resourceType)
@@ -163,7 +163,7 @@ func TestGetOverrideFilename(t *testing.T) {
 			"locals":   "common.tf",
 		},
 	}
-	
+
 	testCases := []struct {
 		blockType string
 		expected  string
@@ -172,7 +172,7 @@ func TestGetOverrideFilename(t *testing.T) {
 		{"locals", "common.tf"},
 		{"output", ""}, // no override
 	}
-	
+
 	for _, tc := range testCases {
 		t.Run(tc.blockType, func(t *testing.T) {
 			result := cfg.GetOverrideFilename(tc.blockType)
@@ -195,7 +195,7 @@ func TestPatternMatching(t *testing.T) {
 		},
 		Exclude: []string{"aws_instance_special*", "*_test"},
 	}
-	
+
 	// グループマッチングのテスト
 	testCases := []struct {
 		resourceType string
@@ -206,7 +206,7 @@ func TestPatternMatching(t *testing.T) {
 		{"storage_bucket", true},
 		{"aws_instance", false},
 	}
-	
+
 	for _, tc := range testCases {
 		t.Run("Group_"+tc.resourceType, func(t *testing.T) {
 			group := cfg.FindGroupForResource(tc.resourceType)
@@ -216,10 +216,10 @@ func TestPatternMatching(t *testing.T) {
 			}
 		})
 	}
-	
+
 	// 除外パターンのテスト
 	excludeTestCases := []struct {
-		resourceType string
+		resourceType  string
 		shouldExclude bool
 	}{
 		{"aws_instance_special", true},
@@ -228,7 +228,7 @@ func TestPatternMatching(t *testing.T) {
 		{"aws_instance", false},
 		{"database_prod", false},
 	}
-	
+
 	for _, tc := range excludeTestCases {
 		t.Run("Exclude_"+tc.resourceType, func(t *testing.T) {
 			result := cfg.IsExcluded(tc.resourceType)

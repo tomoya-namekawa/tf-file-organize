@@ -247,12 +247,12 @@ func TestNewWriter(t *testing.T) {
 	// ファイル作成の動作テストでプロパティを間接的に確認
 	tmpDir := t.TempDir()
 	testWriter := writer.New(tmpDir, false)
-	
+
 	block := parseHCLBlock(t, `variable "test" { type = string }`)
 	groups := []*types.BlockGroup{
 		createTestBlockGroup("test.tf", "variable", []*types.Block{block}),
 	}
-	
+
 	err := testWriter.WriteGroups(groups)
 	if err != nil {
 		t.Errorf("Writer should work correctly: %v", err)

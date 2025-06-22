@@ -43,21 +43,21 @@ func validatePath(path string) error {
 	if path == "" {
 		return fmt.Errorf("path cannot be empty")
 	}
-	
+
 	// Clean the path to normalize it
 	cleanPath := filepath.Clean(path)
-	
+
 	// Check for path traversal attempts
 	if strings.Contains(cleanPath, "..") {
 		return fmt.Errorf("path traversal detected: %s", path)
 	}
-	
+
 	// Convert to absolute path to prevent ambiguity
 	absPath, err := filepath.Abs(cleanPath)
 	if err != nil {
 		return fmt.Errorf("failed to resolve absolute path: %w", err)
 	}
-	
+
 	// Ensure the path doesn't access system directories (additional protection)
 	systemDirs := []string{"/etc", "/bin", "/sbin", "/usr/bin", "/usr/sbin", "/sys", "/proc"}
 	for _, sysDir := range systemDirs {
@@ -65,7 +65,7 @@ func validatePath(path string) error {
 			return fmt.Errorf("access to system directory not allowed: %s", path)
 		}
 	}
-	
+
 	return nil
 }
 
@@ -74,22 +74,22 @@ func validateInputPath(path string) error {
 	if err := validatePath(path); err != nil {
 		return err
 	}
-	
+
 	stat, err := os.Stat(path)
 	if err != nil {
 		return fmt.Errorf("path does not exist or is not accessible: %s", path)
 	}
-	
+
 	// Check for symbolic links to prevent symlink attacks
 	if stat.Mode()&os.ModeSymlink != 0 {
 		return fmt.Errorf("symbolic links are not allowed for security reasons: %s", path)
 	}
-	
+
 	// Additional check: ensure it's a regular file or directory
 	if !stat.IsDir() && !stat.Mode().IsRegular() {
 		return fmt.Errorf("path must be a regular file or directory: %s", path)
 	}
-	
+
 	return nil
 }
 
@@ -98,18 +98,18 @@ func validateOutputPath(path string) error {
 	if path == "" {
 		return nil // Will be set to default later
 	}
-	
+
 	if err := validatePath(path); err != nil {
 		return fmt.Errorf("invalid output directory: %w", err)
 	}
-	
+
 	// If directory exists, check if it's actually a directory
 	if stat, err := os.Stat(path); err == nil {
 		if !stat.IsDir() {
 			return fmt.Errorf("output path exists but is not a directory: %s", path)
 		}
 	}
-	
+
 	return nil
 }
 
@@ -118,27 +118,27 @@ func validateConfigPath(path string) error {
 	if path == "" {
 		return nil // Optional
 	}
-	
+
 	if err := validatePath(path); err != nil {
 		return fmt.Errorf("invalid config file path: %w", err)
 	}
-	
+
 	stat, err := os.Stat(path)
 	if err != nil {
 		return fmt.Errorf("config file does not exist: %s", path)
 	}
-	
+
 	// Ensure it's a regular file
 	if !stat.Mode().IsRegular() {
 		return fmt.Errorf("config path must be a regular file: %s", path)
 	}
-	
+
 	// Check file size to prevent DoS attacks
 	const maxConfigSize = 1024 * 1024 // 1MB
 	if stat.Size() > maxConfigSize {
 		return fmt.Errorf("config file too large (max %d bytes): %s", maxConfigSize, path)
 	}
-	
+
 	return nil
 }
 
@@ -153,11 +153,11 @@ func run() error {
 	if err := validateInputPath(inputFile); err != nil {
 		return fmt.Errorf("invalid input path: %w", err)
 	}
-	
+
 	if err := validateOutputPath(outputDir); err != nil {
 		return err
 	}
-	
+
 	if err := validateConfigPath(configFile); err != nil {
 		return err
 	}
@@ -179,4 +179,3 @@ func run() error {
 
 	return nil
 }
-

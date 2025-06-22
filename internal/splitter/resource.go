@@ -10,7 +10,7 @@ import (
 	"github.com/tomoya-namekawa/terraform-file-organize/pkg/types"
 )
 
-type Splitter struct{
+type Splitter struct {
 	config *config.Config
 }
 
@@ -28,10 +28,10 @@ func NewWithConfig(cfg *config.Config) *Splitter {
 
 func (s *Splitter) GroupBlocks(parsedFile *types.ParsedFile) []*types.BlockGroup {
 	groups := make(map[string]*types.BlockGroup)
-	
+
 	for _, block := range parsedFile.Blocks {
 		key, filename := s.getGroupKeyAndFilename(block)
-		
+
 		if group, exists := groups[key]; exists {
 			group.Blocks = append(group.Blocks, block)
 		} else {
@@ -43,25 +43,25 @@ func (s *Splitter) GroupBlocks(parsedFile *types.ParsedFile) []*types.BlockGroup
 			}
 		}
 	}
-	
+
 	result := make([]*types.BlockGroup, 0, len(groups))
 	for _, group := range groups {
 		// グループ内のブロックをアルファベット順でソート
 		s.sortBlocksInGroup(group)
 		result = append(result, group)
 	}
-	
+
 	// グループ自体もファイル名でソート
 	sort.Slice(result, func(i, j int) bool {
 		return result[i].FileName < result[j].FileName
 	})
-	
+
 	return result
 }
 
 func (s *Splitter) getGroupKeyAndFilename(block *types.Block) (string, string) {
 	resourceType := s.getSubType(block)
-	
+
 	// 設定ファイルでの除外チェック
 	if s.config != nil && resourceType != "" && s.config.IsExcluded(resourceType) {
 		// 除外対象は個別ファイルにする
@@ -69,14 +69,14 @@ func (s *Splitter) getGroupKeyAndFilename(block *types.Block) (string, string) {
 		filename := s.getDefaultFileName(block)
 		return key, filename
 	}
-	
+
 	// 設定ファイルでのグループ化チェック
 	if s.config != nil && resourceType != "" {
 		if group := s.config.FindGroupForResource(resourceType); group != nil {
 			return group.Name, group.Filename
 		}
 	}
-	
+
 	// オーバーライド設定のチェック
 	if s.config != nil {
 		if overrideFilename := s.config.GetOverrideFilename(block.Type); overrideFilename != "" {
@@ -84,7 +84,7 @@ func (s *Splitter) getGroupKeyAndFilename(block *types.Block) (string, string) {
 			return key, overrideFilename
 		}
 	}
-	
+
 	// デフォルトの動作
 	key := s.getDefaultGroupKey(block)
 	filename := s.getDefaultFileName(block)
@@ -175,13 +175,13 @@ func (s *Splitter) sanitizeFileName(name string) string {
 	if name == "" {
 		return "unnamed"
 	}
-	
+
 	// filepath.Cleanを使用してパストラバーサルを防ぐ
 	cleaned := filepath.Clean(name)
-	
+
 	// filepath.Baseを使用してディレクトリ区切り文字を除去
 	cleaned = filepath.Base(cleaned)
-	
+
 	// 残りの危険な文字を置換
 	replacer := strings.NewReplacer(
 		":", "_",
@@ -195,7 +195,7 @@ func (s *Splitter) sanitizeFileName(name string) string {
 		"\x00", "_", // ヌル文字
 	)
 	cleaned = replacer.Replace(cleaned)
-	
+
 	// 制御文字を除去
 	var result strings.Builder
 	for _, r := range cleaned {
@@ -205,29 +205,29 @@ func (s *Splitter) sanitizeFileName(name string) string {
 			result.WriteString("_")
 		}
 	}
-	
+
 	cleaned = result.String()
-	
+
 	// 連続するアンダースコアを単一に
 	for strings.Contains(cleaned, "__") {
 		cleaned = strings.ReplaceAll(cleaned, "__", "_")
 	}
-	
+
 	// 先頭・末尾のアンダースコアを除去
 	cleaned = strings.Trim(cleaned, "_")
-	
+
 	// 長さ制限（Windows互換性のため）
 	const maxLength = 200 // .tfを考慮して200文字
 	if len(cleaned) > maxLength {
 		cleaned = cleaned[:maxLength]
 		cleaned = strings.TrimSuffix(cleaned, "_")
 	}
-	
+
 	// 空になった場合のフォールバック
 	if cleaned == "" {
 		cleaned = "unnamed"
 	}
-	
+
 	// Windowsの予約名チェック
 	reservedNames := map[string]bool{
 		"CON": true, "PRN": true, "AUX": true, "NUL": true,
@@ -237,11 +237,11 @@ func (s *Splitter) sanitizeFileName(name string) string {
 		"LPT4": true, "LPT5": true, "LPT6": true, "LPT7": true,
 		"LPT8": true, "LPT9": true,
 	}
-	
+
 	if reservedNames[strings.ToUpper(cleaned)] {
 		cleaned = "tf_" + cleaned
 	}
-	
+
 	return cleaned
 }
 
