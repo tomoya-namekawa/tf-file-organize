@@ -30,9 +30,6 @@ jobs:
     - name: Run tests
       run: go test -v -race -coverprofile=coverage.out ./...
       
-    - name: Run golden file tests
-      run: go test -run TestGoldenFiles -v
-      
     - name: Check test coverage
       run: go tool cover -func=coverage.out
       
