@@ -39,6 +39,13 @@ go test -run TestGroupBlocks ./internal/splitter
 
 # Run golden file tests (critical for regression detection)
 go test -run TestGoldenFiles -v
+
+# Linting (CI uses golangci-lint)
+golangci-lint run
+
+# Run tests with coverage
+go test -v -race -coverprofile=coverage.out ./...
+go tool cover -func=coverage.out
 ```
 
 ## Architecture
@@ -151,3 +158,25 @@ When modifying output behavior, these files are critical:
 - `internal/splitter/resource.go` - Handles resource sorting and grouping
 - `internal/writer/file.go` - Controls attribute ordering and HCL formatting
 - `testdata/integration/case*/expected/` - Golden file test expectations
+
+## CI/CD Configuration
+
+The project uses GitHub Actions for continuous integration with comprehensive testing and security checks:
+
+**CI Pipeline** (`.github/workflows/ci.yml`):
+- **pinact-check**: Verifies all GitHub Actions are pinned to commit hashes for security
+- **test**: Runs comprehensive test suite with race detection and coverage reporting
+- **lint**: Executes golangci-lint with multiple linters enabled
+- **build**: Builds binary and verifies it works with sample inputs
+- **security**: Runs gosec security scanner for vulnerability detection
+
+**Linting Configuration** (`.golangci.yml`):
+- Comprehensive linter configuration with security-focused rules
+- Excludes test files and testdata from certain checks
+- Timeout configured for 5 minutes to handle large codebases
+
+**Security Features**:
+- All GitHub Actions pinned to commit SHA hashes
+- Automated pinact verification to prevent action tampering
+- gosec security scanning integrated into CI
+- renovatebot (not dependabot) used for dependency management
