@@ -61,7 +61,6 @@ issues:
   max-same-issues: 0
 
 output:
-  formats:
-    - format: colored-line-number
+  format: colored-line-number
   print-issued-lines: true
   print-linter-name: true
