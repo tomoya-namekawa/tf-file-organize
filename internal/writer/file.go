@@ -96,38 +96,9 @@ func (w *Writer) setAttributeFromExpr(targetBody *hclwrite.Body, name string, ex
 	case *hclsyntax.LiteralValueExpr:
 		targetBody.SetAttributeValue(name, e.Val)
 	case *hclsyntax.TemplateExpr:
-		if len(e.Parts) == 1 {
-			if literal, ok := e.Parts[0].(*hclsyntax.LiteralValueExpr); ok {
-				targetBody.SetAttributeValue(name, literal.Val)
-				return
-			}
-		}
-		// より複雑なテンプレートの場合は空の文字列
-		targetBody.SetAttributeValue(name, cty.StringVal(""))
+		w.setTemplateAttribute(targetBody, name, e, expr)
 	case *hclsyntax.TupleConsExpr:
-		// 配列の場合、適切に処理
-		var tokens hclwrite.Tokens
-		tokens = append(tokens, &hclwrite.Token{Type: hclsyntax.TokenOBrack, Bytes: []byte("[")})
-
-		for i, subExpr := range e.Exprs {
-			if i > 0 {
-				tokens = append(tokens,
-					&hclwrite.Token{Type: hclsyntax.TokenComma, Bytes: []byte(",")},
-					&hclwrite.Token{Type: hclsyntax.TokenNewline, Bytes: []byte(" ")})
-			}
-
-			switch se := subExpr.(type) {
-			case *hclsyntax.ScopeTraversalExpr:
-				tokens = append(tokens, hclwrite.TokensForTraversal(se.Traversal)...)
-			case *hclsyntax.LiteralValueExpr:
-				tokens = append(tokens, hclwrite.TokensForValue(se.Val)...)
-			default:
-				tokens = append(tokens, hclwrite.TokensForValue(cty.StringVal(""))...)
-			}
-		}
-
-		tokens = append(tokens, &hclwrite.Token{Type: hclsyntax.TokenCBrack, Bytes: []byte("]")})
-		targetBody.SetAttributeRaw(name, tokens)
+		w.setTupleAttribute(targetBody, name, e)
 	case *hclsyntax.ScopeTraversalExpr:
 		// 変数参照の場合、参照をそのまま設定
 		targetBody.SetAttributeTraversal(name, e.Traversal)
@@ -143,11 +114,111 @@ func (w *Writer) setAttributeFromExpr(targetBody *hclwrite.Body, name string, ex
 	}
 }
 
+// setTemplateAttribute はテンプレート式の属性を設定
+func (w *Writer) setTemplateAttribute(targetBody *hclwrite.Body, name string, e *hclsyntax.TemplateExpr, expr hcl.Expression) {
+	if len(e.Parts) == 1 {
+		if literal, ok := e.Parts[0].(*hclsyntax.LiteralValueExpr); ok {
+			targetBody.SetAttributeValue(name, literal.Val)
+			return
+		}
+	}
+	// 複雑なテンプレートの場合、元の式をそのまま保持
+	if sourceRange := expr.Range(); sourceRange.Filename != "" {
+		w.setComplexTemplateAttribute(targetBody, name, e)
+	} else {
+		// フォールバック: 空文字列
+		targetBody.SetAttributeValue(name, cty.StringVal(""))
+	}
+}
+
+// setComplexTemplateAttribute は複雑なテンプレート式の属性を設定
+func (w *Writer) setComplexTemplateAttribute(targetBody *hclwrite.Body, name string, e *hclsyntax.TemplateExpr) {
+	// 元のソースからトークンを再構築
+	var tokens hclwrite.Tokens
+	tokens = append(tokens, &hclwrite.Token{
+		Type:  hclsyntax.TokenOQuote,
+		Bytes: []byte(`"`),
+	})
+
+	// テンプレートの各部分を処理
+	for _, part := range e.Parts {
+		switch p := part.(type) {
+		case *hclsyntax.LiteralValueExpr:
+			if p.Val.Type() == cty.String {
+				tokens = append(tokens, &hclwrite.Token{
+					Type:  hclsyntax.TokenQuotedLit,
+					Bytes: []byte(p.Val.AsString()),
+				})
+			}
+		case *hclsyntax.ScopeTraversalExpr:
+			tokens = append(tokens, &hclwrite.Token{
+				Type:  hclsyntax.TokenTemplateInterp,
+				Bytes: []byte("${"),
+			})
+			tokens = append(tokens, hclwrite.TokensForTraversal(p.Traversal)...)
+			tokens = append(tokens, &hclwrite.Token{
+				Type:  hclsyntax.TokenTemplateSeqEnd,
+				Bytes: []byte("}"),
+			})
+		default:
+			// 他の式タイプの場合はプレースホルダー
+			tokens = append(tokens,
+				&hclwrite.Token{
+					Type:  hclsyntax.TokenTemplateInterp,
+					Bytes: []byte("${"),
+				},
+				&hclwrite.Token{
+					Type:  hclsyntax.TokenIdent,
+					Bytes: []byte("var.placeholder"),
+				},
+				&hclwrite.Token{
+					Type:  hclsyntax.TokenTemplateSeqEnd,
+					Bytes: []byte("}"),
+				})
+		}
+	}
+
+	tokens = append(tokens, &hclwrite.Token{
+		Type:  hclsyntax.TokenCQuote,
+		Bytes: []byte(`"`),
+	})
+
+	targetBody.SetAttributeRaw(name, tokens)
+}
+
+// setTupleAttribute は配列式の属性を設定
+func (w *Writer) setTupleAttribute(targetBody *hclwrite.Body, name string, e *hclsyntax.TupleConsExpr) {
+	// 配列の場合、適切に処理
+	var tokens hclwrite.Tokens
+	tokens = append(tokens, &hclwrite.Token{Type: hclsyntax.TokenOBrack, Bytes: []byte("[")})
+
+	for i, subExpr := range e.Exprs {
+		if i > 0 {
+			tokens = append(tokens,
+				&hclwrite.Token{Type: hclsyntax.TokenComma, Bytes: []byte(",")},
+				&hclwrite.Token{Type: hclsyntax.TokenNewline, Bytes: []byte(" ")})
+		}
+
+		switch se := subExpr.(type) {
+		case *hclsyntax.ScopeTraversalExpr:
+			tokens = append(tokens, hclwrite.TokensForTraversal(se.Traversal)...)
+		case *hclsyntax.LiteralValueExpr:
+			tokens = append(tokens, hclwrite.TokensForValue(se.Val)...)
+		default:
+			tokens = append(tokens, hclwrite.TokensForValue(cty.StringVal(""))...)
+		}
+	}
+
+	tokens = append(tokens, &hclwrite.Token{Type: hclsyntax.TokenCBrack, Bytes: []byte("]")})
+	targetBody.SetAttributeRaw(name, tokens)
+}
+
 // copyBlockBodyGeneric は汎用的なコピー方法
 func (w *Writer) copyBlockBodyGeneric(sourceBody hcl.Body, targetBody *hclwrite.Body) error {
 	// 包括的なschemaを定義して属性とブロックを取得
 	schema := &hcl.BodySchema{
 		Blocks: []hcl.BlockHeaderSchema{
+			// AWS provider blocks
 			{Type: "filter"},
 			{Type: "ingress"},
 			{Type: "egress"},
@@ -158,6 +229,103 @@ func (w *Writer) copyBlockBodyGeneric(sourceBody hcl.Body, targetBody *hclwrite.
 			{Type: "route"},
 			{Type: "versioning_configuration"},
 			{Type: "required_providers"},
+
+			// Google Cloud provider blocks
+			{Type: "template"},
+			{Type: "spec"},
+			{Type: "containers"},
+			{Type: "env"},
+			{Type: "resources"},
+			{Type: "ports"},
+			{Type: "traffic"},
+			{Type: "metadata"},
+			{Type: "binding"},
+			{Type: "limits"},
+			{Type: "requests"},
+
+			// Azure provider blocks
+			{Type: "site_config"},
+			{Type: "identity"},
+			{Type: "auth_settings"},
+			{Type: "backup"},
+			{Type: "connection_string"},
+			{Type: "logs"},
+
+			// Kubernetes provider blocks
+			{Type: "selector"},
+			{Type: "volume"},
+			{Type: "volume_mount"},
+			{Type: "config_map"},
+			{Type: "secret"},
+			{Type: "service_account"},
+			{Type: "security_context"},
+
+			// Common blocks
+			{Type: "tags"},
+			{Type: "timeouts"},
+			{Type: "depends_on"},
+			{Type: "count"},
+			{Type: "for_each"},
+			{Type: "condition"},
+			{Type: "precondition"},
+			{Type: "postcondition"},
+			{Type: "check"},
+			{Type: "validation"},
+			{Type: "sensitive"},
+			{Type: "nullable"},
+			{Type: "description"},
+
+			// Network and security blocks
+			{Type: "security_group_rule"},
+			{Type: "subnet"},
+			{Type: "vpc"},
+			{Type: "network"},
+			{Type: "firewall"},
+			{Type: "load_balancer"},
+			{Type: "target_group"},
+			{Type: "listener"},
+			{Type: "health_check"},
+
+			// Storage blocks
+			{Type: "disk"},
+			{Type: "volume_attachment"},
+			{Type: "snapshot"},
+			{Type: "backup_policy"},
+			{Type: "encryption"},
+
+			// Database blocks
+			{Type: "database"},
+			{Type: "user"},
+			{Type: "replica"},
+			{Type: "parameter_group"},
+			{Type: "subnet_group"},
+			{Type: "option_group"},
+
+			// Monitoring and logging
+			{Type: "alarm"},
+			{Type: "metric"},
+			{Type: "dashboard"},
+			{Type: "log_group"},
+			{Type: "log_stream"},
+			{Type: "notification"},
+
+			// IAM and permissions
+			{Type: "policy"},
+			{Type: "role"},
+			{Type: "user_policy_attachment"},
+			{Type: "role_policy_attachment"},
+			{Type: "group_policy_attachment"},
+			{Type: "assume_role_policy"},
+			{Type: "trust_policy"},
+
+			// Generic blocks for unknown types
+			{Type: "block"},
+			{Type: "nested_block"},
+			{Type: "configuration"},
+			{Type: "settings"},
+			{Type: "options"},
+			{Type: "parameters"},
+			{Type: "attributes"},
 		},
 	}
 

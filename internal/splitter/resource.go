@@ -116,9 +116,7 @@ func (s *Splitter) getDefaultGroupKey(block *types.Block) string {
 		}
 		return block.Type
 	case blockTypeProvider:
-		if len(block.Labels) > 0 {
-			return fmt.Sprintf("%s_%s", block.Type, block.Labels[0])
-		}
+		// すべてのproviderを同じグループにまとめる
 		return "providers"
 	case blockTypeVariable:
 		return "variables"

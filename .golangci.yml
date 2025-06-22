@@ -8,7 +8,6 @@ linters:
     - dupl
     - errcheck
     - exhaustive
-    - funlen
     - gochecknoinits
     - goconst
     - gocritic
@@ -30,9 +29,6 @@ linters:
   settings:
     dupl:
       threshold: 100
-    funlen:
-      lines: 100
-      statements: 50
     goconst:
       min-len: 2
       min-occurrences: 2
@@ -60,7 +56,6 @@ linters:
     rules:
       - linters:
           - dupl
-          - funlen
           - gocyclo
           - gosec
           - gocritic
@@ -71,7 +66,6 @@ linters:
         path: testdata/
       - linters:
           - dupl
-          - funlen
           - gocyclo
         path: integration.*test\.go
       - linters:

@@ -30,6 +30,10 @@ func TestGoldenFiles(t *testing.T) {
 			name:        "case3",
 			description: "Configuration file with custom grouping rules",
 		},
+		{
+			name:        "case4",
+			description: "Complex nested blocks and template expressions",
+		},
 	}
 
 	for _, tc := range testCases {
