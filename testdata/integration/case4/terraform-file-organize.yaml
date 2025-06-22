@@ -1,5 +1,4 @@
 # case4: 複雑なブロック構造とテンプレート式のテスト
 # デフォルト設定を使用して、複雑なリソースが正しく処理されることを確認
 groups: []
-overrides: {}
-exclude: []
+exclude_files: []

@@ -4,5 +4,4 @@ groups:
     filename: "compute.tf"
     patterns:
       - "aws_instance"
-overrides: {}
-exclude: []
+exclude_files: []

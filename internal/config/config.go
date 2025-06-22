@@ -14,9 +14,8 @@ import (
 
 // Config represents the main configuration structure for file organization rules.
 type Config struct {
-	Groups    []GroupConfig     `yaml:"groups"`    // カスタムグループ化ルール
-	Overrides map[string]string `yaml:"overrides"` // ブロックタイプ別ファイル名オーバーライド
-	Exclude   []string          `yaml:"exclude"`   // 除外パターン
+	Groups       []GroupConfig `yaml:"groups"`        // カスタムグループ化ルール
+	ExcludeFiles []string      `yaml:"exclude_files"` // 除外ファイルパターン
 }
 
 // GroupConfig defines a custom grouping rule for specific resource patterns.
@@ -62,6 +61,11 @@ func LoadConfig(configPath string) (*Config, error) {
 		return nil, fmt.Errorf("failed to read config file: %w", err)
 	}
 
+	// 無効なフィールドの検出
+	if err := validateConfigFields(data); err != nil {
+		return nil, fmt.Errorf("invalid configuration fields: %w", err)
+	}
+
 	var config Config
 	if err := yaml.Unmarshal(data, &config); err != nil {
 		return nil, fmt.Errorf("failed to parse config file: %w", err)
@@ -75,15 +79,69 @@ func LoadConfig(configPath string) (*Config, error) {
 	return &config, nil
 }
 
+// ValidateConfig performs comprehensive validation of a configuration
+func ValidateConfig(cfg *Config) error {
+	// Check for duplicate group names
+	groupNames := make(map[string]bool)
+	for i, group := range cfg.Groups {
+		if groupNames[group.Name] {
+			return fmt.Errorf("duplicate group name '%s' at group %d", group.Name, i+1)
+		}
+		groupNames[group.Name] = true
+	}
+
+	// Check for duplicate filenames
+	filenames := make(map[string]string)
+	for i, group := range cfg.Groups {
+		if existingGroup, exists := filenames[group.Filename]; exists {
+			return fmt.Errorf("duplicate filename '%s' in group '%s' (group %d) - already used by group '%s'", group.Filename, group.Name, i+1, existingGroup)
+		}
+		filenames[group.Filename] = group.Name
+	}
+
+	// Check for pattern conflicts (same pattern in multiple groups)
+	patternGroups := make(map[string]string)
+	for _, group := range cfg.Groups {
+		for _, pattern := range group.Patterns {
+			if existingGroup, exists := patternGroups[pattern]; exists {
+				return fmt.Errorf("pattern '%s' appears in multiple groups: '%s' and '%s'", pattern, existingGroup, group.Name)
+			}
+			patternGroups[pattern] = group.Name
+		}
+	}
+
+	// Validate exclude file patterns
+	for i, pattern := range cfg.ExcludeFiles {
+		if pattern == "" {
+			return fmt.Errorf("exclude file pattern %d is empty", i+1)
+		}
+		// Test pattern validity by attempting to match against a test string
+		if !isValidPattern(pattern) {
+			return fmt.Errorf("exclude file pattern %d ('%s') contains invalid characters", i+1, pattern)
+		}
+	}
+
+	return nil
+}
+
+// isValidPattern checks if a pattern is valid for file matching
+func isValidPattern(pattern string) bool {
+	// Check for basic invalid characters that could cause issues
+	invalidChars := []string{"\x00", "\n", "\r", "\t"}
+	for _, char := range invalidChars {
+		if strings.Contains(pattern, char) {
+			return false
+		}
+	}
+	return true
+}
+
 // validateConfig validates the loaded configuration for security and correctness
 func validateConfig(config *Config) error {
 	if err := validateGroups(config.Groups); err != nil {
 		return err
 	}
-	if err := validateOverrides(config.Overrides); err != nil {
-		return err
-	}
-	if err := validateExcludePatterns(config.Exclude); err != nil {
+	if err := validateExcludeFilePatterns(config.ExcludeFiles); err != nil {
 		return err
 	}
 	return nil
@@ -128,30 +186,14 @@ func validatePatterns(patterns []string, groupIndex int, groupName string) error
 	return nil
 }
 
-// validateOverrides validates override configurations
-func validateOverrides(overrides map[string]string) error {
-	for blockType, filename := range overrides {
-		if blockType == "" {
-			return fmt.Errorf("override: block type cannot be empty")
-		}
-		if filename == "" {
-			return fmt.Errorf("override for %s: filename cannot be empty", blockType)
-		}
-		if err := validateFilename(filename); err != nil {
-			return fmt.Errorf("override for %s: invalid filename: %w", blockType, err)
-		}
-	}
-	return nil
-}
-
-// validateExcludePatterns validates exclude pattern configurations
-func validateExcludePatterns(patterns []string) error {
+// validateExcludeFilePatterns validates exclude file pattern configurations
+func validateExcludeFilePatterns(patterns []string) error {
 	for i, pattern := range patterns {
 		if pattern == "" {
-			return fmt.Errorf("exclude pattern %d: pattern cannot be empty", i)
+			return fmt.Errorf("exclude file pattern %d: pattern cannot be empty", i)
 		}
 		if len(pattern) > 100 {
-			return fmt.Errorf("exclude pattern %d: pattern too long (max 100 chars)", i)
+			return fmt.Errorf("exclude file pattern %d: pattern too long (max 100 chars)", i)
 		}
 	}
 	return nil
@@ -205,20 +247,13 @@ func (c *Config) FindGroupForResource(resourceType string) *GroupConfig {
 	return nil
 }
 
-func (c *Config) IsExcluded(resourceType string) bool {
-	for _, pattern := range c.Exclude {
-		if c.matchPattern(pattern, resourceType) {
+func (c *Config) IsFileExcluded(filename string) bool {
+	for _, pattern := range c.ExcludeFiles {
+		if c.matchPattern(pattern, filename) {
 			return true
 		}
 	}
 	return false
-}
-
-func (c *Config) GetOverrideFilename(blockType string) string {
-	if filename, exists := c.Overrides[blockType]; exists {
-		return filename
-	}
-	return ""
 }
 
 func (c *Config) matchPattern(pattern, text string) bool {
@@ -234,21 +269,109 @@ func (c *Config) wildcardMatch(pattern, text string) bool {
 		return true
 	}
 
-	if strings.HasSuffix(pattern, "*") {
-		prefix := pattern[:len(pattern)-1]
-		return strings.HasPrefix(text, prefix)
+	// filepath.Matchと同様のロジックを使用
+	return c.matchWithWildcards(pattern, text)
+}
+
+// matchWithWildcards は複数の*を含むパターンを処理
+func (c *Config) matchWithWildcards(pattern, text string) bool {
+	patternIndex := 0
+	textIndex := 0
+	starIdx := -1
+	match := 0
+
+	for textIndex < len(text) {
+		if patternIndex < len(pattern) && (pattern[patternIndex] == text[textIndex] || pattern[patternIndex] == '?') {
+			patternIndex++
+			textIndex++
+		} else if patternIndex < len(pattern) && pattern[patternIndex] == '*' {
+			starIdx = patternIndex
+			match = textIndex
+			patternIndex++
+		} else if starIdx != -1 {
+			patternIndex = starIdx + 1
+			match++
+			textIndex = match
+		} else {
+			return false
+		}
 	}
 
-	if strings.HasPrefix(pattern, "*") {
-		suffix := pattern[1:]
-		return strings.HasSuffix(text, suffix)
+	// パターンの残りの*を処理
+	for patternIndex < len(pattern) && pattern[patternIndex] == '*' {
+		patternIndex++
 	}
 
-	parts := strings.Split(pattern, "*")
-	if len(parts) == 2 {
-		prefix, suffix := parts[0], parts[1]
-		return strings.HasPrefix(text, prefix) && strings.HasSuffix(text, suffix)
+	return patternIndex == len(pattern)
+}
+
+// validateConfigFields は設定ファイル内の無効なフィールドを検出
+func validateConfigFields(data []byte) error {
+	// 生のYAMLを map[string]any にパース
+	var rawConfig map[string]any
+	if err := yaml.Unmarshal(data, &rawConfig); err != nil {
+		return fmt.Errorf("failed to parse YAML: %w", err)
 	}
 
-	return false
+	// 有効なトップレベルフィールドを定義
+	validTopLevelFields := map[string]bool{
+		"groups":        true,
+		"exclude_files": true,
+	}
+
+	// 古い形式や無効なフィールドを検出
+	var invalidFields []string
+	var deprecatedFields []string
+
+	for field := range rawConfig {
+		if !validTopLevelFields[field] {
+			// 既知の古いフィールドかチェック
+			switch field {
+			case "exclude":
+				deprecatedFields = append(deprecatedFields, fmt.Sprintf("'%s' (use 'exclude_files' instead)", field))
+			case "overrides":
+				deprecatedFields = append(deprecatedFields, fmt.Sprintf("'%s' (no longer supported)", field))
+			default:
+				invalidFields = append(invalidFields, fmt.Sprintf("'%s'", field))
+			}
+		}
+	}
+
+	// グループ内の無効なフィールドも検証
+	if groupsInterface, exists := rawConfig["groups"]; exists {
+		if groups, ok := groupsInterface.([]any); ok {
+			validGroupFields := map[string]bool{
+				"name":     true,
+				"filename": true,
+				"patterns": true,
+			}
+
+			for i, groupInterface := range groups {
+				if group, ok := groupInterface.(map[string]any); ok {
+					for field := range group {
+						if !validGroupFields[field] {
+							invalidFields = append(invalidFields, fmt.Sprintf("'%s' in group %d", field, i+1))
+						}
+					}
+				}
+			}
+		}
+	}
+
+	// エラーメッセージの構築
+	var errorMessages []string
+
+	if len(deprecatedFields) > 0 {
+		errorMessages = append(errorMessages, fmt.Sprintf("deprecated fields found: %s", strings.Join(deprecatedFields, ", ")))
+	}
+
+	if len(invalidFields) > 0 {
+		errorMessages = append(errorMessages, fmt.Sprintf("unknown fields found: %s", strings.Join(invalidFields, ", ")))
+	}
+
+	if len(errorMessages) > 0 {
+		return fmt.Errorf("%s", strings.Join(errorMessages, "; "))
+	}
+
+	return nil
 }

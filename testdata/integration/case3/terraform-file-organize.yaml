@@ -10,10 +10,14 @@ groups:
     patterns:
       - "aws_instance"
       - "aws_launch_*"
+  - name: "variables"
+    filename: "vars.tf"
+    patterns:
+      - "variable"
+  - name: "locals"
+    filename: "common.tf"
+    patterns:
+      - "locals"
 
-overrides:
-  variable: "vars.tf"
-  locals: "common.tf"
-
-exclude:
+exclude_files:
   - "aws_instance_special*"
