@@ -7,6 +7,10 @@ output "service_internal_url" {
   description = "Internal URL of the service"
   value       = "https://${google_cloud_run_service.complex_service.status[0].url}"
 }
+
+
+# Outputs with complex expressions
+
 output "service_url" {
   description = "URL of the Cloud Run service"
   value       = "https://${local.full_domain}"

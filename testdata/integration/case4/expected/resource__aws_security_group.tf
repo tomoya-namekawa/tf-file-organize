@@ -1,3 +1,7 @@
+
+
+# AWS Security Group with complex ingress/egress rules
+
 resource "aws_security_group" "complex_sg" {
   name_prefix = "${local.service_name}-"
   description = "Complex security group for ${local.service_name}"
@@ -79,6 +83,10 @@ resource "aws_security_group" "database" {
   vpc_id      = aws_vpc.main.id
   tags        = local.common_tags
 }
+
+
+# Additional resources for dynamic blocks testing
+
 resource "aws_security_group" "management" {
   name_prefix = "management-"
   vpc_id      = aws_vpc.main.id

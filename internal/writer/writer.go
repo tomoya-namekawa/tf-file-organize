@@ -1,3 +1,5 @@
+// Package writer provides functionality to write grouped Terraform blocks
+// to output files with comment preservation and formatting.
 package writer
 
 import (
@@ -5,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 
 	"github.com/hashicorp/hcl/v2"
 	"github.com/hashicorp/hcl/v2/hclsyntax"
@@ -14,17 +17,19 @@ import (
 	"github.com/tomoya-namekawa/terraform-file-organize/pkg/types"
 )
 
-// 空のスキーマ - 内部構造は気にせずRawBodyを優先使用
+// emptyBlockSchema is used when we don't need to parse internal structure and prefer RawBody.
 var emptyBlockSchema = &hcl.BodySchema{
 	Blocks: []hcl.BlockHeaderSchema{},
 }
 
+// Writer handles writing grouped blocks to output files.
 type Writer struct {
-	outputDir   string
-	dryRun      bool
-	addComments bool // コメント追加を有効にするかどうか
+	outputDir   string // 出力ディレクトリ
+	dryRun      bool   // ドライランモード
+	addComments bool   // コメント追加を有効にするかどうか
 }
 
+// New creates a new Writer with default settings.
 func New(outputDir string, dryRun bool) *Writer {
 	return &Writer{
 		outputDir:   outputDir,
@@ -33,7 +38,7 @@ func New(outputDir string, dryRun bool) *Writer {
 	}
 }
 
-// NewWithComments はコメント追加機能付きのWriterを作成
+// NewWithComments creates a new Writer with comment addition enabled.
 func NewWithComments(outputDir string, dryRun, addComments bool) *Writer {
 	return &Writer{
 		outputDir:   outputDir,
@@ -42,6 +47,7 @@ func NewWithComments(outputDir string, dryRun, addComments bool) *Writer {
 	}
 }
 
+// WriteGroups writes all block groups to their respective output files.
 func (w *Writer) WriteGroups(groups []*types.BlockGroup) error {
 	if !w.dryRun {
 		if err := os.MkdirAll(w.outputDir, 0750); err != nil {
@@ -76,7 +82,29 @@ func (w *Writer) writeGroup(group *types.BlockGroup) error {
 	rootBody := file.Body()
 
 	for i, block := range group.Blocks {
-		if i > 0 {
+		// ブロック前のLeadingCommentsを出力（常に有効）
+		if block.LeadingComments != "" {
+			// 最初のブロック以外でLeadingCommentsがある場合、前のブロックとの間に空行を追加
+			if i > 0 {
+				rootBody.AppendNewline()
+			}
+
+			// LeadingCommentsを行ごとに分割してトークンとして追加
+			lines := strings.Split(block.LeadingComments, "\n")
+			for _, line := range lines {
+				if line != "" {
+					rootBody.AppendUnstructuredTokens(hclwrite.Tokens{
+						{Type: hclsyntax.TokenComment, Bytes: []byte(line)},
+						{Type: hclsyntax.TokenNewline, Bytes: []byte("\n")},
+					})
+				} else {
+					rootBody.AppendNewline()
+				}
+			}
+			// LeadingCommentsの後に空行を追加
+			rootBody.AppendNewline()
+		} else if i > 0 {
+			// LeadingCommentsがない場合で最初のブロック以外では空行を追加
 			rootBody.AppendNewline()
 		}
 

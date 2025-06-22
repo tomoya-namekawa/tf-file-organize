@@ -38,6 +38,7 @@ Input can be either a single .tf file or a directory containing .tf files.`,
 	},
 }
 
+// Execute runs the root command and handles CLI argument parsing.
 func Execute() error {
 	// Setup flags
 	rootCmd.Flags().StringVarP(&outputDir, "output-dir", "o", "", "Output directory for split files (default: same as input path)")
@@ -60,15 +61,26 @@ func validatePath(path string) error {
 	// Clean the path to normalize it
 	cleanPath := filepath.Clean(path)
 
-	// Check for path traversal attempts
-	if strings.Contains(cleanPath, "..") {
-		return fmt.Errorf("path traversal detected: %s", path)
-	}
-
-	// Convert to absolute path to prevent ambiguity
+	// Convert to absolute path first to properly validate
 	absPath, err := filepath.Abs(cleanPath)
 	if err != nil {
 		return fmt.Errorf("failed to resolve absolute path: %w", err)
+	}
+
+	// Get current working directory to validate relative paths
+	cwd, err := os.Getwd()
+	if err != nil {
+		return fmt.Errorf("failed to get current working directory: %w", err)
+	}
+
+	// Check if the absolute path is within current working directory or its subdirectories
+	// This allows relative paths like ../config.yaml but prevents access to system directories
+	if !strings.HasPrefix(absPath, cwd) {
+		// Allow if it's still within a reasonable project scope
+		projectRoot := filepath.Dir(cwd)
+		if !strings.HasPrefix(absPath, projectRoot) {
+			return fmt.Errorf("path outside allowed directory scope: %s", path)
+		}
 	}
 
 	// Ensure the path doesn't access system directories (additional protection)

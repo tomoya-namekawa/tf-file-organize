@@ -1,3 +1,7 @@
+
+
+# KMS Key
+
 resource "google_kms_crypto_key" "secret_key" {
   name     = "${local.service_name}-secret-key"
   key_ring = google_kms_key_ring.main.id

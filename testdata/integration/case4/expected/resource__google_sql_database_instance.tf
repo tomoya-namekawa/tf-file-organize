@@ -1,3 +1,7 @@
+
+
+# SQL Database instance with complex configuration
+
 resource "google_sql_database_instance" "main" {
   name             = "${local.service_name}-db"
   database_version = "POSTGRES_13"

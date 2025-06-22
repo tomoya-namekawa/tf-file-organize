@@ -1,3 +1,5 @@
+// Package splitter provides functionality to group Terraform blocks by type
+// and apply custom grouping rules based on configuration.
 package splitter
 
 import (
@@ -22,22 +24,26 @@ const (
 	blockTypeTerraform = "terraform"
 )
 
+// Splitter groups Terraform blocks according to configuration rules.
 type Splitter struct {
 	config *config.Config
 }
 
+// New creates a new Splitter with default configuration.
 func New() *Splitter {
 	return &Splitter{
 		config: &config.Config{},
 	}
 }
 
+// NewWithConfig creates a new Splitter with the provided configuration.
 func NewWithConfig(cfg *config.Config) *Splitter {
 	return &Splitter{
 		config: cfg,
 	}
 }
 
+// GroupBlocks groups the parsed blocks according to configuration rules and returns block groups.
 func (s *Splitter) GroupBlocks(parsedFile *types.ParsedFile) []*types.BlockGroup {
 	groups := make(map[string]*types.BlockGroup)
 

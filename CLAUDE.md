@@ -52,17 +52,17 @@ The codebase follows clean architecture principles with strict layered separatio
 
 ### Core Components
 
-1. **Usecase Layer** (`internal/usecase/organize.go`): Business logic orchestrator that coordinates all operations. Implements security validation, configuration loading, and error handling.
+1. **Usecase Layer** (`internal/usecase/usecase.go`): Business logic orchestrator that coordinates all operations. Implements security validation, configuration loading, and error handling with dependency injection support for testing.
 
-2. **Parser** (`internal/parser/terraform.go`): Uses `github.com/hashicorp/hcl/v2` to parse Terraform files into structured data. **Key feature**: Extracts raw block content with comments preserved using dual parsing (standard HCL + syntax trees). Supports both single files and recursive directory parsing.
+2. **Parser** (`internal/parser/parser.go`): Uses `github.com/hashicorp/hcl/v2` to parse Terraform files into structured data. **Key feature**: Extracts raw block content with comments preserved using dual parsing (standard HCL + syntax trees). Supports both single files and recursive directory parsing.
 
 3. **Config** (`internal/config/config.go`): Manages YAML configuration files for custom grouping rules. Supports wildcard pattern matching, resource exclusion, and filename overrides.
 
-4. **Splitter** (`internal/splitter/resource.go`): Groups parsed blocks by type and subtype. **Critical**: Implements deterministic sorting for stable output.
+4. **Splitter** (`internal/splitter/splitter.go`): Groups parsed blocks by type and subtype. **Critical**: Implements deterministic sorting for stable output.
 
-5. **Writer** (`internal/writer/file.go`): Converts grouped blocks back to HCL format. **Key features**: Comment preservation via raw source code reconstruction, optional descriptive comment generation, and deterministic attribute ordering.
+5. **Writer** (`internal/writer/writer.go`): Converts grouped blocks back to HCL format. **Key features**: Comment preservation via raw source code reconstruction, optional descriptive comment generation, and deterministic attribute ordering.
 
-6. **Types** (`pkg/types/terraform.go`): Defines core data structures including Block (with RawBody for comment preservation), ParsedFile, and BlockGroup.
+6. **Types** (`pkg/types/types.go`): Defines core data structures including Block (with RawBody and LeadingComments for comment preservation), ParsedFile, and BlockGroup.
 
 7. **Version** (`internal/version/version.go`): Manages version information with fallback support for different build methods. Uses `runtime/debug.BuildInfo` for `go install` compatibility while maintaining GoReleaser ldflags injection priority.
 
@@ -93,9 +93,9 @@ Auto-searches for configuration files in this order:
 ## Testing Strategy
 
 ### Test Structure
-- **Unit Tests**: All `internal/` packages have `*_test.go` files using separate test packages for isolation
-- **Integration Tests**: Binary-based CLI testing and golden file testing
-- **Golden File Tests**: **Critical** - Compares actual output against expected files in `testdata/integration/`
+- **Unit Tests**: All `internal/` packages have `*_test.go` files using separate test packages for isolation. Business logic tests in `business_test.go` use dependency injection with mocks.
+- **CLI Tests** (`cli_test.go`): Command-line interface functionality testing via binary execution
+- **Golden File Tests** (`golden_test.go`): **Critical** - End-to-end testing with CLI binary comparing actual output against expected files in `testdata/integration/`
 
 ### Test Data Organization
 ```
@@ -116,12 +116,18 @@ testdata/
 # Regression detection (most important)
 go test -run TestGoldenFiles -v
 
+# CLI interface testing
+go test -run TestCLI -v
+
 # Package-specific tests
 go test ./internal/config -v
 go test ./internal/parser -v
 go test ./internal/splitter -v
 go test ./internal/writer -v
 go test ./internal/usecase -v
+
+# Business logic testing with mocks
+go test ./internal/usecase -run TestOrganizeFilesUsecase_ExecuteBusinessLogic -v
 
 # Coverage target: >60%
 go test -v -coverprofile=coverage.out ./...
@@ -139,14 +145,14 @@ go tool cover -func=coverage.out
 
 ### Code Standards
 - Use constants for repeated strings (enforced by goconst linter)
-- Terraform block types defined as constants in `internal/splitter/resource.go`
+- Terraform block types defined as constants in `internal/splitter/splitter.go`
 - Modern Go patterns: `slices.Contains()` instead of loops
 - Named return values for complex functions
 
 ### Critical Files for Output Changes
 When modifying output behavior, update these files:
-- `internal/splitter/resource.go` - Resource sorting and grouping
-- `internal/writer/file.go` - Attribute ordering and HCL formatting
+- `internal/splitter/splitter.go` - Resource sorting and grouping
+- `internal/writer/writer.go` - Attribute ordering and HCL formatting
 - `testdata/integration/case*/expected/` - Golden file test expectations
 
 ## CI/CD Configuration
@@ -274,13 +280,14 @@ The tool ALWAYS preserves block-internal comments by default. This is achieved t
 
 ### What Is Preserved
 - **All block-internal comments**: `# comment` within blocks
+- **Block-preceding comments**: Comments immediately before blocks (via LeadingComments field)
 - **Original formatting**: Spacing, indentation, and attribute order
 - **Complex expressions**: Template strings, nested objects, and function calls
 - **Multi-line structures**: Objects, arrays, and nested blocks
 
 ### What Is NOT Preserved
 - **File-level comments**: Comments outside of blocks (by design - file organization changes structure)
-- **Block header comments**: Comments above block declarations (optional via `--add-comments`)
+- **Block header comments**: Comments above block declarations become leading comments in organized files
 
 ### Example
 ```hcl
@@ -307,14 +314,23 @@ resource "aws_instance" "web" {
 
 - **README.md**: User-focused documentation in Japanese with installation instructions and basic usage examples
 - **DEVELOPMENT.md**: Comprehensive developer documentation in Japanese including detailed development workflow with Conventional Commits and release-please process
-- **CLAUDE.md**: Technical reference for Claude Code with architecture details and critical implementation information
+- **CLAUDE.md**: Technical reference for Claude Code with Go-standard architecture details and critical implementation information
 
-## Best Practices
+## File Naming and Structure Conventions
 
-### File Management
-- テスト結果などの一時的なファイルはtmp dirに作って
+### Go Standard Compliance
+This project follows Go standard naming conventions:
 
-### Test Case Details
+- **Package names provide context**: Files within packages use simple names (e.g., `parser.go` not `hcl_parser.go`)
+- **Test separation**: Business logic tests (`business_test.go`), CLI tests (`cli_test.go`), golden file tests (`golden_test.go`)
+- **Clean architecture**: `internal/` for private implementation, `pkg/` for public APIs, `cmd/` for command definitions
+
+### Test Organization
+- **Unit tests**: Mock-based, fast, no I/O operations
+- **Integration tests**: CLI binary execution with real file operations  
+- **Golden file tests**: End-to-end regression testing with exact output comparison
+
+### Critical Test Case Details
 
 **case5**: Specifically tests the fallback processing when RawBody is unavailable. This case validates:
 - Complex template expressions like `"${var.subdomain}.${var.domain_name}"`

@@ -1,3 +1,7 @@
+
+
+# Secret Manager secret
+
 resource "google_secret_manager_secret" "app_secret" {
   secret_id = "${local.service_name}-secret"
 

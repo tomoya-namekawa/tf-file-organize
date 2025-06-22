@@ -3,16 +3,15 @@ package main
 import (
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"sort"
 	"strings"
 	"testing"
-
-	"github.com/tomoya-namekawa/terraform-file-organize/internal/usecase"
 )
 
-// TestGoldenFiles は Golden File Testing を実行
-// 実際の出力と期待される出力を比較してファイル分割の正確性を検証
+// TestGoldenFiles はエンドツーエンドのGolden File Testing を実行
+// CLIバイナリ経由で実際の出力と期待される出力を比較し、品質保証と回帰テストを行う
 func TestGoldenFiles(t *testing.T) {
 	testCases := []struct {
 		name        string
@@ -47,31 +46,35 @@ func TestGoldenFiles(t *testing.T) {
 			expectedDir := filepath.Join(caseDir, "expected")
 			actualDir := filepath.Join("tmp", "integration-test", tc.name)
 
-			// 出力ディレクトリを作成
+			// 出力ディレクトリをクリーンアップしてから作成
+			if err := os.RemoveAll(actualDir); err != nil {
+				t.Fatalf("Failed to remove existing output directory: %v", err)
+			}
 			if err := os.MkdirAll(actualDir, 0755); err != nil {
 				t.Fatalf("Failed to create output directory: %v", err)
 			}
 
-			// ファイル分割の実行（usecaseを使用）
-			uc := usecase.NewOrganizeFilesUsecase()
+			// バイナリをビルド（キャッシュされる）
+			binary := filepath.Join(t.TempDir(), "terraform-file-organize")
+			buildCmd := exec.Command("go", "build", "-o", binary)
+			err := buildCmd.Run()
+			if err != nil {
+				t.Fatalf("Failed to build binary: %v", err)
+			}
 
 			// 設定ファイルのパスを決定
 			configPath := filepath.Join(caseDir, "terraform-file-organize.yaml")
-			var configFilePath string
+			var args []string
+			args = append(args, inputDir, "--output-dir", actualDir)
 			if _, statErr := os.Stat(configPath); statErr == nil {
-				configFilePath = configPath
+				args = append(args, "--config", configPath)
 			}
 
-			req := &usecase.OrganizeFilesRequest{
-				InputPath:  inputDir,
-				OutputDir:  actualDir,
-				ConfigFile: configFilePath,
-				DryRun:     false,
-			}
-
-			_, err := uc.Execute(req)
+			// CLIバイナリ経由でファイル分割を実行
+			cmd := exec.Command(binary, args...)
+			output, err := cmd.CombinedOutput()
 			if err != nil {
-				t.Fatalf("Failed to process directory: %v", err)
+				t.Fatalf("Failed to process directory: %v\nOutput: %s", err, output)
 			}
 
 			// 期待される出力と実際の出力を比較
@@ -190,26 +193,27 @@ func normalizeContent(content string) string {
 	return strings.Join(normalizedLines, "\n")
 }
 
-// Benchmark tests for performance regression detection
+// BenchmarkFileProcessing はCLIバイナリのパフォーマンス回帰テスト
 func BenchmarkFileProcessing(b *testing.B) {
 	inputDir := "testdata/integration/case1/input"
 	outputDir := filepath.Join("tmp", "benchmark-test")
 
-	uc := usecase.NewOrganizeFilesUsecase()
+	// バイナリをビルド（ベンチマーク実行前に一度だけ）
+	binary := filepath.Join(b.TempDir(), "terraform-file-organize")
+	buildCmd := exec.Command("go", "build", "-o", binary)
+	err := buildCmd.Run()
+	if err != nil {
+		b.Fatalf("Failed to build binary: %v", err)
+	}
 
 	for b.Loop() {
 		// 出力ディレクトリをクリア
 		_ = os.RemoveAll(outputDir)
 		_ = os.MkdirAll(outputDir, 0755)
 
-		req := &usecase.OrganizeFilesRequest{
-			InputPath:  inputDir,
-			OutputDir:  outputDir,
-			ConfigFile: "", // デフォルト設定を使用
-			DryRun:     false,
-		}
-
-		_, err := uc.Execute(req)
+		// CLIバイナリ経由でファイル処理
+		cmd := exec.Command(binary, inputDir, "--output-dir", outputDir)
+		_, err := cmd.CombinedOutput()
 		if err != nil {
 			b.Fatalf("Failed to process directory: %v", err)
 		}

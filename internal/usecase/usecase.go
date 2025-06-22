@@ -13,6 +13,26 @@ import (
 	"github.com/tomoya-namekawa/terraform-file-organize/pkg/types"
 )
 
+// ParserInterface はParserの抽象化
+type ParserInterface interface {
+	ParseFile(filename string) (*types.ParsedFile, error)
+}
+
+// SplitterInterface はSplitterの抽象化
+type SplitterInterface interface {
+	GroupBlocks(parsedFile *types.ParsedFile) []*types.BlockGroup
+}
+
+// WriterInterface はWriterの抽象化
+type WriterInterface interface {
+	WriteGroups(groups []*types.BlockGroup) error
+}
+
+// ConfigLoaderInterface は設定読み込みの抽象化
+type ConfigLoaderInterface interface {
+	LoadConfig(configPath string) (*config.Config, error)
+}
+
 // OrganizeFilesRequest は OrganizeFiles ユースケースのリクエスト
 type OrganizeFilesRequest struct {
 	InputPath   string
@@ -32,14 +52,62 @@ type OrganizeFilesResponse struct {
 }
 
 // OrganizeFilesUsecase は Terraform ファイル整理のユースケース
-type OrganizeFilesUsecase struct{}
+type OrganizeFilesUsecase struct {
+	parser       ParserInterface
+	splitter     SplitterInterface
+	writer       WriterInterface
+	configLoader ConfigLoaderInterface
+}
 
 // NewOrganizeFilesUsecase は新しい OrganizeFilesUsecase を作成
 func NewOrganizeFilesUsecase() *OrganizeFilesUsecase {
-	return &OrganizeFilesUsecase{}
+	return &OrganizeFilesUsecase{
+		parser:       parser.New(),
+		splitter:     nil, // Executeで設定付きで初期化
+		writer:       nil, // Executeで初期化
+		configLoader: &DefaultConfigLoader{},
+	}
 }
 
-// Execute は Terraform ファイルの整理を実行
+// NewOrganizeFilesUsecaseWithDeps は依存関係を注入して OrganizeFilesUsecase を作成
+func NewOrganizeFilesUsecaseWithDeps(p ParserInterface, s SplitterInterface, w WriterInterface, c ConfigLoaderInterface) *OrganizeFilesUsecase {
+	return &OrganizeFilesUsecase{
+		parser:       p,
+		splitter:     s,
+		writer:       w,
+		configLoader: c,
+	}
+}
+
+// DefaultConfigLoader wraps config.LoadConfig for dependency injection.
+type DefaultConfigLoader struct{}
+
+// LoadConfig loads configuration using the standard config loader.
+func (d *DefaultConfigLoader) LoadConfig(configPath string) (*config.Config, error) {
+	if configPath != "" {
+		fmt.Printf("Loading configuration from: %s\n", configPath)
+		return config.LoadConfig(configPath)
+	}
+
+	// 設定ファイルが指定されていない場合はデフォルトを探す
+	defaultConfigs := []string{
+		"terraform-file-organize.yaml",
+		"terraform-file-organize.yml",
+		".terraform-file-organize.yaml",
+		".terraform-file-organize.yml",
+	}
+
+	for _, defaultConfig := range defaultConfigs {
+		if _, err := os.Stat(defaultConfig); err == nil {
+			fmt.Printf("Loading configuration from: %s\n", defaultConfig)
+			return config.LoadConfig(defaultConfig)
+		}
+	}
+
+	return &config.Config{}, nil
+}
+
+// Execute performs the main business logic for organizing Terraform files.
 func (uc *OrganizeFilesUsecase) Execute(req *OrganizeFilesRequest) (*OrganizeFilesResponse, error) {
 	// 入力パスの情報を取得
 	stat, err := os.Stat(req.InputPath)
@@ -58,7 +126,7 @@ func (uc *OrganizeFilesUsecase) Execute(req *OrganizeFilesRequest) (*OrganizeFil
 	}
 
 	// 設定ファイルの処理
-	cfg, err := uc.loadConfig(req.ConfigFile)
+	cfg, err := uc.configLoader.LoadConfig(req.ConfigFile)
 	if err != nil {
 		return nil, fmt.Errorf("failed to load config: %w", err)
 	}
@@ -81,16 +149,29 @@ func (uc *OrganizeFilesUsecase) Execute(req *OrganizeFilesRequest) (*OrganizeFil
 	}
 
 	// ブロックのグループ化
-	combinedFile := &types.ParsedFile{Blocks: allBlocks}
-	s := splitter.NewWithConfig(cfg)
-	groups := s.GroupBlocks(combinedFile)
+	// 依存性注入されたsplitterを使用するか、設定ファイル付きのデフォルトを作成
+	var groups []*types.BlockGroup
+	parsedFile := &types.ParsedFile{Blocks: allBlocks}
+	if uc.splitter != nil {
+		groups = uc.splitter.GroupBlocks(parsedFile)
+	} else {
+		s := splitter.NewWithConfig(cfg)
+		groups = s.GroupBlocks(parsedFile)
+	}
 
 	fmt.Printf("Organized into %d file groups\n", len(groups))
 
 	// ファイルの書き出し
-	w := writer.NewWithComments(outputDir, req.DryRun, req.AddComments)
-	if err := w.WriteGroups(groups); err != nil {
-		return nil, fmt.Errorf("failed to write files: %w", err)
+	// 依存性注入されたwriterを使用するか、デフォルトを作成
+	if uc.writer != nil {
+		if err := uc.writer.WriteGroups(groups); err != nil {
+			return nil, fmt.Errorf("failed to write files: %w", err)
+		}
+	} else {
+		w := writer.NewWithComments(outputDir, req.DryRun, req.AddComments)
+		if err := w.WriteGroups(groups); err != nil {
+			return nil, fmt.Errorf("failed to write files: %w", err)
+		}
 	}
 
 	// 結果の表示
@@ -109,31 +190,6 @@ func (uc *OrganizeFilesUsecase) Execute(req *OrganizeFilesRequest) (*OrganizeFil
 	}, nil
 }
 
-// loadConfig は設定ファイルを読み込む
-func (uc *OrganizeFilesUsecase) loadConfig(configFile string) (*config.Config, error) {
-	if configFile != "" {
-		fmt.Printf("Loading configuration from: %s\n", configFile)
-		return config.LoadConfig(configFile)
-	}
-
-	// 設定ファイルが指定されていない場合はデフォルトを探す
-	defaultConfigs := []string{
-		"terraform-file-organize.yaml",
-		"terraform-file-organize.yml",
-		".terraform-file-organize.yaml",
-		".terraform-file-organize.yml",
-	}
-
-	for _, defaultConfig := range defaultConfigs {
-		if _, err := os.Stat(defaultConfig); err == nil {
-			fmt.Printf("Loading configuration from: %s\n", defaultConfig)
-			return config.LoadConfig(defaultConfig)
-		}
-	}
-
-	return &config.Config{}, nil
-}
-
 // parseInput は入力パス（ファイルまたはディレクトリ）を解析
 func (uc *OrganizeFilesUsecase) parseInput(inputPath string, stat os.FileInfo) ([]*types.Block, int, error) {
 	var allBlocks []*types.Block
@@ -150,8 +206,7 @@ func (uc *OrganizeFilesUsecase) parseInput(inputPath string, stat os.FileInfo) (
 		fmt.Printf("Found %d .tf files with %d total blocks\n", fileCount, len(allBlocks))
 	} else {
 		fmt.Printf("Parsing Terraform file: %s\n", inputPath)
-		p := parser.New()
-		parsedFile, err := p.ParseFile(inputPath)
+		parsedFile, err := uc.parser.ParseFile(inputPath)
 		if err != nil {
 			return nil, 0, err
 		}
@@ -186,8 +241,7 @@ func (uc *OrganizeFilesUsecase) parseDirectory(dirPath string) ([]*types.Block, 
 				return nil
 			}
 
-			p := parser.New()
-			parsedFile, parseErr := p.ParseFile(path)
+			parsedFile, parseErr := uc.parser.ParseFile(path)
 			if parseErr != nil {
 				fmt.Printf("Warning: failed to parse %s: %v\n", path, parseErr)
 				return nil

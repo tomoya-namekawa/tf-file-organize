@@ -6,11 +6,28 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
+// createTestDir creates a test directory within the project's tmp folder
+func createTestDir(t *testing.T, testName string) string {
+	tmpDir := filepath.Join("tmp", "cli-test", testName+"-"+t.Name()+"-"+time.Now().Format("20060102-150405"))
+	err := os.MkdirAll(tmpDir, 0755)
+	if err != nil {
+		t.Fatalf("Failed to create test directory: %v", err)
+	}
+	t.Cleanup(func() {
+		_ = os.RemoveAll(tmpDir)
+	})
+	return tmpDir
+}
+
 func TestCLIBasicUsage(t *testing.T) {
+	// テスト用ディレクトリを作成
+	testDir := createTestDir(t, "basic")
+
 	// バイナリをビルド
-	binary := filepath.Join(t.TempDir(), "terraform-file-organize")
+	binary := filepath.Join(testDir, "terraform-file-organize")
 	cmd := exec.Command("go", "build", "-o", binary)
 	err := cmd.Run()
 	if err != nil {
@@ -18,9 +35,8 @@ func TestCLIBasicUsage(t *testing.T) {
 	}
 
 	// テスト用ファイルを作成
-	tmpDir := t.TempDir()
-	inputFile := filepath.Join(tmpDir, "main.tf")
-	outputDir := filepath.Join(tmpDir, "split")
+	inputFile := filepath.Join(testDir, "main.tf")
+	outputDir := filepath.Join(testDir, "split")
 
 	tfContent := `
 terraform {
@@ -71,16 +87,18 @@ output "instance_id" {
 }
 
 func TestCLIDryRun(t *testing.T) {
-	binary := filepath.Join(t.TempDir(), "terraform-file-organize")
+	// テスト用ディレクトリを作成
+	testDir := createTestDir(t, "dryrun")
+
+	binary := filepath.Join(testDir, "terraform-file-organize")
 	cmd := exec.Command("go", "build", "-o", binary)
 	err := cmd.Run()
 	if err != nil {
 		t.Fatalf("Failed to build binary: %v", err)
 	}
 
-	tmpDir := t.TempDir()
-	inputFile := filepath.Join(tmpDir, "main.tf")
-	outputDir := filepath.Join(tmpDir, "split")
+	inputFile := filepath.Join(testDir, "main.tf")
+	outputDir := filepath.Join(testDir, "split")
 
 	tfContent := `
 resource "aws_instance" "web" {
@@ -112,16 +130,18 @@ resource "aws_instance" "web" {
 }
 
 func TestCLIDirectoryInput(t *testing.T) {
-	binary := filepath.Join(t.TempDir(), "terraform-file-organize")
+	// テスト用ディレクトリを作成
+	testDir := createTestDir(t, "directory")
+
+	binary := filepath.Join(testDir, "terraform-file-organize")
 	cmd := exec.Command("go", "build", "-o", binary)
 	err := cmd.Run()
 	if err != nil {
 		t.Fatalf("Failed to build binary: %v", err)
 	}
 
-	tmpDir := t.TempDir()
-	inputDir := filepath.Join(tmpDir, "terraform")
-	outputDir := filepath.Join(tmpDir, "split")
+	inputDir := filepath.Join(testDir, "terraform")
+	outputDir := filepath.Join(testDir, "split")
 
 	err = os.MkdirAll(inputDir, 0755)
 	if err != nil {
@@ -184,17 +204,19 @@ resource "aws_instance" "web2" {
 }
 
 func TestCLIWithConfigFile(t *testing.T) {
-	binary := filepath.Join(t.TempDir(), "terraform-file-organize")
+	// テスト用ディレクトリを作成
+	testDir := createTestDir(t, "config")
+
+	binary := filepath.Join(testDir, "terraform-file-organize")
 	cmd := exec.Command("go", "build", "-o", binary)
 	err := cmd.Run()
 	if err != nil {
 		t.Fatalf("Failed to build binary: %v", err)
 	}
 
-	tmpDir := t.TempDir()
-	inputFile := filepath.Join(tmpDir, "main.tf")
-	configFile := filepath.Join(tmpDir, "config.yaml")
-	outputDir := filepath.Join(tmpDir, "split")
+	inputFile := filepath.Join(testDir, "main.tf")
+	configFile := filepath.Join(testDir, "config.yaml")
+	outputDir := filepath.Join(testDir, "split")
 
 	tfContent := `
 resource "aws_vpc" "main" {
@@ -262,17 +284,19 @@ groups:
 }
 
 func TestCLIAutoConfigDetection(t *testing.T) {
-	binary := filepath.Join(t.TempDir(), "terraform-file-organize")
+	// テスト用ディレクトリを作成
+	testDir := createTestDir(t, "autoconfig")
+
+	binary := filepath.Join(testDir, "terraform-file-organize")
 	cmd := exec.Command("go", "build", "-o", binary)
 	err := cmd.Run()
 	if err != nil {
 		t.Fatalf("Failed to build binary: %v", err)
 	}
 
-	tmpDir := t.TempDir()
-	inputFile := filepath.Join(tmpDir, "main.tf")
-	configFile := filepath.Join(tmpDir, "terraform-file-organize.yaml")
-	outputDir := filepath.Join(tmpDir, "split")
+	inputFile := filepath.Join(testDir, "main.tf")
+	configFile := filepath.Join(testDir, "terraform-file-organize.yaml")
+	outputDir := filepath.Join(testDir, "split")
 
 	tfContent := `
 variable "name" {
@@ -296,8 +320,23 @@ overrides:
 	}
 
 	// 設定ファイルを明示的に指定せずにCLIを実行（自動検出をテスト）
-	cmd = exec.Command(binary, inputFile, "--output-dir", outputDir)
-	cmd.Dir = tmpDir // 作業ディレクトリを設定
+	// 絶対パスを使用
+	absInputFile, err := filepath.Abs(inputFile)
+	if err != nil {
+		t.Fatalf("Failed to get absolute path for input file: %v", err)
+	}
+	absOutputDir, err := filepath.Abs(outputDir)
+	if err != nil {
+		t.Fatalf("Failed to get absolute path for output dir: %v", err)
+	}
+
+	absBinary, err := filepath.Abs(binary)
+	if err != nil {
+		t.Fatalf("Failed to get absolute path for binary: %v", err)
+	}
+
+	cmd = exec.Command(absBinary, absInputFile, "--output-dir", absOutputDir)
+	cmd.Dir = testDir // 作業ディレクトリを設定
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		t.Fatalf("CLI execution failed: %v\nOutput: %s", err, output)
@@ -316,15 +355,19 @@ overrides:
 }
 
 func TestCLIErrorHandling(t *testing.T) {
-	binary := filepath.Join(t.TempDir(), "terraform-file-organize")
+	// テスト用ディレクトリを作成
+	testDir := createTestDir(t, "error")
+
+	binary := filepath.Join(testDir, "terraform-file-organize")
 	cmd := exec.Command("go", "build", "-o", binary)
 	err := cmd.Run()
 	if err != nil {
 		t.Fatalf("Failed to build binary: %v", err)
 	}
 
-	// 存在しないファイルを指定
-	cmd = exec.Command(binary, "/nonexistent/file.tf")
+	// 存在しないファイルを指定（プロジェクト内の存在しないパス）
+	nonexistentFile := filepath.Join(testDir, "nonexistent", "file.tf")
+	cmd = exec.Command(binary, nonexistentFile)
 	output, err := cmd.CombinedOutput()
 	if err == nil {
 		t.Errorf("Expected error for nonexistent file, got none")
@@ -342,9 +385,8 @@ func TestCLIErrorHandling(t *testing.T) {
 	}
 
 	// 無効な設定ファイルを指定
-	tmpDir := t.TempDir()
-	inputFile := filepath.Join(tmpDir, "main.tf")
-	invalidConfigFile := filepath.Join(tmpDir, "invalid.yaml")
+	inputFile := filepath.Join(testDir, "main.tf")
+	invalidConfigFile := filepath.Join(testDir, "invalid.yaml")
 
 	err = os.WriteFile(inputFile, []byte(`resource "aws_instance" "web" {}`), 0644)
 	if err != nil {

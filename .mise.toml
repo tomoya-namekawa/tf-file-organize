@@ -9,6 +9,7 @@ pinact = "latest"
 actionlint = "latest"
 golangci-lint = "v2.1.6"
 "npm:@goreleaser/goreleaser" = "latest"
+terraform = "latest"
 
 [env]
 # Go environment variables

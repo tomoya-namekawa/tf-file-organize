@@ -1,3 +1,5 @@
+// Package config provides configuration management for terraform-file-organize,
+// including custom grouping rules, overrides, and exclusion patterns.
 package config
 
 import (
@@ -10,18 +12,21 @@ import (
 	"github.com/goccy/go-yaml"
 )
 
+// Config represents the main configuration structure for file organization rules.
 type Config struct {
-	Groups    []GroupConfig     `yaml:"groups"`
-	Overrides map[string]string `yaml:"overrides"`
-	Exclude   []string          `yaml:"exclude"`
+	Groups    []GroupConfig     `yaml:"groups"`    // カスタムグループ化ルール
+	Overrides map[string]string `yaml:"overrides"` // ブロックタイプ別ファイル名オーバーライド
+	Exclude   []string          `yaml:"exclude"`   // 除外パターン
 }
 
+// GroupConfig defines a custom grouping rule for specific resource patterns.
 type GroupConfig struct {
-	Name     string   `yaml:"name"`
-	Filename string   `yaml:"filename"`
-	Patterns []string `yaml:"patterns"`
+	Name     string   `yaml:"name"`     // グループ名
+	Filename string   `yaml:"filename"` // 出力ファイル名
+	Patterns []string `yaml:"patterns"` // マッチするパターンのリスト
 }
 
+// LoadConfig loads and validates a configuration file from the specified path.
 func LoadConfig(configPath string) (*Config, error) {
 	if configPath == "" {
 		return &Config{}, nil
