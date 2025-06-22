@@ -14,118 +14,9 @@ import (
 	"github.com/tomoya-namekawa/terraform-file-organize/pkg/types"
 )
 
-// ネストしたブロックタイプの定義
-var nestedBlockSchema = &hcl.BodySchema{
-	Blocks: []hcl.BlockHeaderSchema{
-		// AWS provider blocks
-		{Type: "filter"},
-		{Type: "ingress"},
-		{Type: "egress"},
-		{Type: "lifecycle"},
-		{Type: "provisioner", LabelNames: []string{"type"}},
-		{Type: "connection"},
-		{Type: "dynamic", LabelNames: []string{"for_each"}},
-		{Type: "route"},
-		{Type: "versioning_configuration"},
-		{Type: "required_providers"},
-
-		// Google Cloud provider blocks
-		{Type: "template"},
-		{Type: "spec"},
-		{Type: "containers"},
-		{Type: "env"},
-		{Type: "resources"},
-		{Type: "ports"},
-		{Type: "traffic"},
-		{Type: "metadata"},
-		{Type: "binding"},
-		{Type: "limits"},
-		{Type: "requests"},
-
-		// Azure provider blocks
-		{Type: "site_config"},
-		{Type: "identity"},
-		{Type: "auth_settings"},
-		{Type: "backup"},
-		{Type: "connection_string"},
-		{Type: "logs"},
-
-		// Kubernetes provider blocks
-		{Type: "selector"},
-		{Type: "volume"},
-		{Type: "volume_mount"},
-		{Type: "config_map"},
-		{Type: "secret"},
-		{Type: "service_account"},
-		{Type: "security_context"},
-
-		// Common blocks
-		{Type: "tags"},
-		{Type: "timeouts"},
-		{Type: "depends_on"},
-		{Type: "count"},
-		{Type: "for_each"},
-		{Type: "condition"},
-		{Type: "precondition"},
-		{Type: "postcondition"},
-		{Type: "check"},
-		{Type: "validation"},
-		{Type: "sensitive"},
-		{Type: "nullable"},
-		{Type: "description"},
-
-		// Network and security blocks
-		{Type: "security_group_rule"},
-		{Type: "subnet"},
-		{Type: "vpc"},
-		{Type: "network"},
-		{Type: "firewall"},
-		{Type: "load_balancer"},
-		{Type: "target_group"},
-		{Type: "listener"},
-		{Type: "health_check"},
-
-		// Storage blocks
-		{Type: "disk"},
-		{Type: "volume_attachment"},
-		{Type: "snapshot"},
-		{Type: "backup_policy"},
-		{Type: "encryption"},
-
-		// Database blocks
-		{Type: "database"},
-		{Type: "user"},
-		{Type: "replica"},
-		{Type: "parameter_group"},
-		{Type: "subnet_group"},
-		{Type: "option_group"},
-
-		// Monitoring and logging
-		{Type: "alarm"},
-		{Type: "metric"},
-		{Type: "dashboard"},
-		{Type: "log_group"},
-		{Type: "log_stream"},
-		{Type: "notification"},
-
-		// IAM and permissions
-		{Type: "policy"},
-		{Type: "role"},
-		{Type: "user_policy_attachment"},
-		{Type: "role_policy_attachment"},
-		{Type: "group_policy_attachment"},
-		{Type: "assume_role_policy"},
-		{Type: "trust_policy"},
-
-		// Generic blocks for unknown types
-		{Type: "block"},
-		{Type: "nested_block"},
-		{Type: "configuration"},
-		{Type: "settings"},
-		{Type: "options"},
-		{Type: "parameters"},
-		{Type: "attributes"},
-	},
+// 空のスキーマ - 内部構造は気にせずRawBodyを優先使用
+var emptyBlockSchema = &hcl.BodySchema{
+	Blocks: []hcl.BlockHeaderSchema{},
 }
 
 type Writer struct {
@@ -438,9 +329,10 @@ func (w *Writer) setObjectAttributeSimple(targetBody *hclwrite.Body, name string
 	targetBody.SetAttributeRaw(name, tokens)
 }
 
-// copyBlockBodyGeneric は汎用的なコピー方法
+// copyBlockBodyGeneric は汎用的なコピー方法（簡素化版）
 func (w *Writer) copyBlockBodyGeneric(sourceBody hcl.Body, targetBody *hclwrite.Body) error {
-	content, remaining, diags := sourceBody.PartialContent(nestedBlockSchema)
+	// 内部構造を詳細に解析せず、シンプルにコピー
+	_, remaining, diags := sourceBody.PartialContent(emptyBlockSchema)
 	if diags.HasErrors() {
 		// エラーがあっても続行してベストエフォートで処理
 		fmt.Printf("Warning: HCL parsing diagnostics: %v\n", diags)
@@ -449,14 +341,9 @@ func (w *Writer) copyBlockBodyGeneric(sourceBody hcl.Body, targetBody *hclwrite.
 	// 属性をコピー
 	w.copyAttributes(sourceBody, targetBody)
 
-	// 既知のブロックをコピー
-	if err := w.copyBlocks(content.Blocks, targetBody); err != nil {
-		return fmt.Errorf("failed to copy known blocks: %w", err)
-	}
-
-	// 未知のブロックをコピー
+	// 全てのブロックを未知として処理（内部構造は気にしない）
 	if err := w.copyUnknownBlocks(remaining, targetBody); err != nil {
-		return fmt.Errorf("failed to copy unknown blocks: %w", err)
+		return fmt.Errorf("failed to copy blocks: %w", err)
 	}
 
 	return nil
@@ -486,17 +373,6 @@ func (w *Writer) copyAttributes(sourceBody hcl.Body, targetBody *hclwrite.Body) 
 			}
 		}
 	}
-}
-
-// copyBlocks は既知のブロックをコピー
-func (w *Writer) copyBlocks(blocks []*hcl.Block, targetBody *hclwrite.Body) error {
-	for _, block := range blocks {
-		nestedBlock := targetBody.AppendNewBlock(block.Type, block.Labels)
-		if err := w.copyBlockBody(block.Body, nestedBlock.Body()); err != nil {
-			return fmt.Errorf("failed to copy nested block: %w", err)
-		}
-	}
-	return nil
 }
 
 // copyUnknownBlocks は未知のブロックをコピー
