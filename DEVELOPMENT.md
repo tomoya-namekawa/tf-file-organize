@@ -4,12 +4,20 @@ terraform-file-organizeの開発に関する詳細なガイドです。
 
 ## 開発環境のセットアップ
 
-### 必要な依存関係
+### ツール管理
 
-- Go 1.24.4+
-- github.com/hashicorp/hcl/v2
-- github.com/spf13/cobra
-- golangci-lint (lintingのため)
+このプロジェクトは[mise](https://mise.jdx.dev/)を使用して開発ツールを統一管理しています。
+
+```bash
+# miseをインストール（初回のみ）
+curl https://mise.run | sh
+
+# プロジェクトの依存ツールをインストール
+mise install
+
+# ツールバージョンの確認
+mise list
+```
 
 ### 初期セットアップ
 
@@ -34,113 +42,124 @@ go build -o terraform-file-organize
 go build -o terraform-file-organize
 
 # 全テストの実行
-go test ./...
+go test -v -coverprofile=coverage.out ./...
+go tool cover -func=coverage.out
 
-# パッケージ別テスト
-go test ./internal/config
-go test ./internal/parser
-go test ./internal/splitter  
-go test ./internal/writer
-go test ./internal/usecase
-
-# 統合テスト
-go test -v ./integration_test.go
-go test -v ./integration_golden_test.go
-
-# 単一テストの実行
-go test -run TestGroupBlocks ./internal/splitter
-
-# ゴールデンファイルテスト（回帰検出のため重要）
+# 重要：ゴールデンファイルテスト（回帰検出）
 go test -run TestGoldenFiles -v
 
-# カバレッジ付きテスト
-go test -v -race -coverprofile=coverage.out ./...
+# CLI機能テスト（全サブコマンド）
+go test -run TestCLI -v
+
+# パッケージ別テスト
+go test ./internal/config -v
+go test ./internal/parser -v
+go test ./internal/splitter -v
+go test ./internal/writer -v
+go test ./internal/usecase -v
+
+# カバレッジ目標: 60%以上
+go test -v -coverprofile=coverage.out ./...
 go tool cover -func=coverage.out
 ```
 
-### Linting
+### コード品質チェック
 
 ```bash
-# golangci-lintの実行
+# Linting
 golangci-lint run
 
-# CI用のlintコマンド（タイムアウト設定付き）
-golangci-lint run --timeout=5m
+# フォーマット
+go mod tidy
+
+# ワークフロー検証
+actionlint
 ```
 
 ### 開発時のテスト実行
 
 ```bash
-# テスト実行（単一ファイル）
-./terraform-file-organize testdata/terraform/sample.tf --dry-run
+# プレビューモード
+./terraform-file-organize plan testdata/terraform/sample.tf
 
-# テスト実行（ディレクトリ）
-./terraform-file-organize testdata/terraform --output-dir tmp/test --dry-run
+# ディレクトリ処理
+./terraform-file-organize plan testdata/terraform
 
 # 設定ファイル付きテスト
-./terraform-file-organize testdata/terraform --config testdata/configs/terraform-file-organize.yaml --dry-run
+./terraform-file-organize plan testdata/terraform --config testdata/configs/terraform-file-organize.yaml
+
+# 設定ファイル検証
+./terraform-file-organize validate-config testdata/configs/terraform-file-organize.yaml
 ```
 
-## アーキテクチャと開発ガイドライン
+## アーキテクチャ
 
 ### コード構造
 
 本ツールはクリーンアーキテクチャの原則に従って設計されており、以下のレイヤーで構成されています：
 
-- **CLI層** (`cmd/`): コマンドライン引数の解析
+- **CLI層** (`cmd/`): サブコマンド定義と引数解析
 - **ユースケース層** (`internal/usecase/`): ビジネスロジックの調整とセキュリティ検証
 - **ドメイン層** (`internal/`): コア機能（パーサー、スプリッター、ライター、設定）
 - **データ層** (`pkg/types/`): データ構造の定義
 
-### 開発時の重要な原則
+### サブコマンド構造
 
-#### 1. 決定的出力の維持
+- `run <input-path>`: ファイル整理の実行
+- `plan <input-path>`: プレビューモード（旧 --dry-run）
+- `validate-config <config-file>`: 設定ファイル検証
+- `version`: バージョン情報表示
+
+## 開発時の重要な原則
+
+### 1. 冪等性の維持
+
+ツールは複数回実行しても一貫した結果を保証する必要があります：
+
+- **デフォルト動作**: ソースファイルを削除して重複を防止
+- **バックアップオプション**: `--backup`でソースファイルを'backup'ディレクトリに移動
+- **スマート競合解決**: 設定ルールを考慮したファイル削除ロジック
+
+### 2. 決定的出力の維持
 
 CI/CDやバージョン管理との互換性を確保するため、出力は常に決定的である必要があります：
 
 - **リソースの並び順**: グループ内でアルファベット順にソート
 - **属性の並び順**: HCL属性をアルファベット順にソート
 - **ファイル名の並び順**: 出力ファイル名をアルファベット順にソート
-- **フォーマット**: `hclwrite.Format`による一貫したフォーマット
 
-#### 2. セキュリティファースト
+### 3. コメント保持
+
+ブロック内コメントは常に保持される必要があります：
+
+- **デュアルパースィング**: 標準HCL + `hclsyntax`パーシング
+- **RawBody抽出**: コメントを含む元ソース抽出
+- **Raw Block再構築**: 元コンテンツでの出力
+
+### 4. セキュリティファースト
 
 - すべてのファイルパス操作は `filepath.Clean` と `filepath.Base` を使用
 - 入力値の検証をusecase層で実装
 - パストラバーサル攻撃対策を徹底
 
-#### 3. HCL処理の統一
+### 5. パターンマッチング
 
-- 必ずHashiCorp公式のhcl/v2ライブラリを使用
-- HCL構文の処理は公式パーサーに依存
+複雑なパターンマッチングシステムをサポート：
 
-### テスト戦略
+- **シンプルパターン**: `aws_s3_*`
+- **サブタイプパターン**: `resource.aws_instance.web*`
+- **ブロックタイプパターン**: `variable`, `output.debug_*`
+- **複数ワイルドカード**: `*special*`
 
-#### 単体テスト
+## テスト戦略
 
-- 全ての `internal/` パッケージに対応する `*_test.go` ファイル
-- インポートサイクル回避のため別テストパッケージ使用（例：`config_test`）
+### テスト構造
 
-#### 統合テスト
+- **単体テスト**: 全ての `internal/` パッケージに対応、別テストパッケージ使用
+- **CLIテスト** (`cli_test.go`): バイナリ実行による機能テスト
+- **ゴールデンファイルテスト** (`golden_test.go`): **最重要** - 回帰検出
 
-- `integration_test.go`: バイナリベースのCLIテスト
-- `integration_golden_test.go`: **重要** - ゴールデンファイルテスト
-
-#### ゴールデンファイルテスト
-
-**最も重要なテスト**です。回帰を防ぐため実際の出力と期待値を厳密に比較します。
-
-```bash
-# ゴールデンファイルテストの実行
-go test -run TestGoldenFiles -v
-
-# 期待値ファイルの更新（出力形式変更時）
-./terraform-file-organize testdata/integration/case1/input -o testdata/integration/case1/expected
-./terraform-file-organize testdata/integration/case2/input -o testdata/integration/case2/expected
-./terraform-file-organize testdata/integration/case3/input -o testdata/integration/case3/expected
-```
-
-#### テストデータ構造
+### テストデータ構造
 
 ```
 testdata/
@@ -149,103 +168,80 @@ testdata/
 └── integration/        # ゴールデンファイルテストケース
     ├── case1/          # 基本ブロック（デフォルト設定）
     ├── case2/          # 複数ファイルの基本グループ化
-    └── case3/          # 設定ファイルによるカスタムグループ化
+    ├── case3/          # 設定ファイルによるカスタムグループ化
+    ├── case4/          # 複雑なマルチクラウド構成（25ブロック）
+    └── case5/          # テンプレート式とネストブロック
 ```
 
-## CI/CD
+### ゴールデンファイルテスト
+
+**最も重要なテスト**です。出力変更時は期待値ファイルの更新が必要：
+
+```bash
+# ゴールデンファイルテストの実行
+go test -run TestGoldenFiles -v
+
+# 期待値ファイルの更新（出力形式変更時）
+cp tmp/integration-test/case*/* testdata/integration/case*/expected/
+```
+
+## 開発ワークフロー
+
+### プレコミットチェックリスト
+
+```bash
+# 1. フォーマットとLint
+golangci-lint run
+
+# 2. カバレッジ付きテスト
+go test -v -coverprofile=coverage.out ./...
+
+# 3. ゴールデンファイル検証
+go test -run TestGoldenFiles -v
+
+# 4. ビルドと統合テスト
+go build -o terraform-file-organize
+./terraform-file-organize plan testdata/terraform/sample.tf
+
+# 5. ワークフロー検証
+actionlint
+```
+
+### 出力変更時の注意点
+
+出力形式を変更した場合：
+
+1. **ゴールデンファイルの期待値を更新**
+2. **決定的出力が維持されているか確認**
+3. **コメント保持機能が正常に動作するか確認**
+
+## CI/CD設定
 
 ### GitHub Actions
 
-プロジェクトは包括的なCI/CDパイプラインを持っています：
-
-- **pinact-check**: GitHub Actionsのハッシュ固定確認
-- **test**: テストスイートの実行（レース検出・カバレッジ付き）
-- **lint**: golangci-lintによる静的解析
-- **build**: バイナリビルドと動作確認
-- **security**: gosecによるセキュリティスキャン
+- **Main CI Pipeline** (`.github/workflows/ci.yml`): test, lint, build with security scanning
+- **Workflow Lint Pipeline** (`.github/workflows/workflow-lint.yml`): actionlint and pinact checks
 
 ### セキュリティ機能
 
-- 全てのGitHub ActionsはコミットSHAハッシュで固定
-- pinactによる自動検証
-- gosecセキュリティスキャナー統合
-- renovatebotによる依存関係管理
+- GitHub Actionsのコミットハッシュ固定
+- gosecセキュリティスキャン統合
+- パストラバーサル攻撃対策
 
-## 貢献時の注意点
+### Tool Versions (mise管理)
 
-### プルリクエスト前のチェックリスト
-
-1. **全テストの実行**
-   ```bash
-   go test ./...
-   ```
-
-2. **ゴールデンファイルテストの実行**
-   ```bash
-   go test -run TestGoldenFiles -v
-   ```
-
-3. **Linting**
-   ```bash
-   golangci-lint run
-   ```
-
-4. **出力形式を変更した場合**
-   - ゴールデンファイルの期待値を更新
-   - 決定的出力が維持されているか確認
-
-### よくある問題と解決方法
-
-#### 1. ゴールデンファイルテストの失敗
-
-出力形式を変更した場合、期待値ファイルの更新が必要です：
-
-```bash
-# 新しい出力で期待値を更新
-./terraform-file-organize testdata/integration/case1/input -o testdata/integration/case1/expected
+```toml
+[tools]
+go = "latest"
+golangci-lint = "v2.1.6"
+actionlint = "latest"
+pinact = "latest"
+"npm:@goreleaser/goreleaser" = "latest"
 ```
 
-#### 2. インポートサイクル
+## リリースプロセス
 
-テストファイルは別パッケージ（例：`package config_test`）として作成してください。
-
-#### 3. 非決定的出力
-
-コレクション（スライス、マップ）はソートしてから出力してください。
-
-## デバッグとトラブルシューティング
-
-### ログ出力
-
-```bash
-# 詳細なテスト出力
-go test -v ./...
-
-# 特定のテストのデバッグ
-go test -run TestSpecificFunction -v ./internal/package
-```
-
-### 手動テスト
-
-```bash
-# ドライランでの動作確認
-./terraform-file-organize testdata/terraform/sample.tf --dry-run
-
-# 実際のファイル作成
-mkdir -p tmp/manual-test
-./terraform-file-organize testdata/terraform/sample.tf -o tmp/manual-test
-```
-
-### 設定ファイルのテスト
-
-```bash
-# カスタム設定でのテスト
-./terraform-file-organize testdata/terraform --config testdata/configs/terraform-file-organize.yaml -o tmp/config-test --dry-run
-```
-
-## 開発フローとリリースプロセス
-
-### Conventional Commitsによる開発フロー
+### Conventional Commitsによる自動リリース
 
 このプロジェクトはConventional Commitsとrelease-pleaseによる自動リリースを採用しています。
 
@@ -253,10 +249,10 @@ mkdir -p tmp/manual-test
 
 ```bash
 # 新機能の追加
-git commit -m "feat: add support for terraform modules"
+git commit -m "feat: add plan subcommand for preview mode"
 
 # バグ修正
-git commit -m "fix: resolve parsing error for nested blocks"
+git commit -m "fix: resolve pattern matching for complex wildcards"
 
 # パフォーマンス改善
 git commit -m "perf: optimize HCL parsing performance"
@@ -265,10 +261,10 @@ git commit -m "perf: optimize HCL parsing performance"
 git commit -m "refactor: simplify resource grouping logic"
 
 # ドキュメント更新
-git commit -m "docs: update installation instructions"
+git commit -m "docs: update README for subcommand structure"
 
-# テストの追加
-git commit -m "test: add golden file tests for case4"
+# テストの追加・修正
+git commit -m "test: add golden file tests for idempotency"
 
 # CI/CDの変更
 git commit -m "ci: update GitHub Actions workflow"
@@ -284,8 +280,8 @@ git commit -m "chore: update development documentation"
 
 - `feat:` → **minor** バージョンアップ (0.1.0 → 0.2.0)
 - `fix:` → **patch** バージョンアップ (0.1.0 → 0.1.1)
-- `perf:`, `refactor:`, `docs:`, `test:`, `ci:`, `build:`, `chore:` → **patch** バージョンアップ
 - `BREAKING CHANGE:` フッター → **major** バージョンアップ (0.1.0 → 1.0.0)
+- その他 → **patch** バージョンアップ
 
 #### 自動リリースプロセス
 
@@ -294,96 +290,61 @@ git commit -m "chore: update development documentation"
 3. **リリース**: PRをマージするとGoReleaserが自動実行
 4. **成果物**: GitHub Releasesにバイナリとchangelogが公開
 
-#### ブランチ戦略
-
-- **main**: 安定版ブランチ（ここへのマージでリリースPRが作成される）
-- **feature branches**: 機能開発用ブランチ
-- **release-please--branches--main--components--terraform-file-organize**: release-pleaseが自動作成するリリースPR用ブランチ
-
-### リリース設定ファイル
+### 設定ファイル
 
 - `.release-please-manifest.json`: 現在のバージョン管理
 - `release-please-config.json`: リリース設定
 - `.goreleaser.yaml`: バイナリビルド設定
 
-### 手動操作が必要な場合
-
-通常は自動リリースを使用しますが、以下の場合は手動操作が必要です：
-
-#### リリースPRのマージ
-
-release-pleaseが作成するPRは手動でレビュー・マージする必要があります：
-
-1. release-pleaseがPR作成（`chore(main): release v1.0.0`）
-2. PRの内容確認（CHANGELOG、バージョン更新）
-3. PRのマージ
-4. 自動でGoReleaserが実行され、リリース完了
-
-#### 緊急リリース
-
-緊急時は以下の手順でリリース可能：
+### 手動リリーステスト
 
 ```bash
-# 1. 修正をコミット
-git commit -m "fix: critical security issue"
+# ローカルでリリースビルドをテスト
+make release-snapshot
 
-# 2. release-pleaseを手動実行（GitHub Actions）
-# または以下でローカル実行
-npm install -g release-please
-release-please release-pr --repo-url=https://github.com/tomoya-namekawa/terraform-file-organize
+# GoReleaser設定の確認
+make release-check
 ```
 
-## 技術仕様
+## よくある問題と解決方法
 
-### アーキテクチャ
+### 1. ゴールデンファイルテストの失敗
 
-本ツールはクリーンアーキテクチャの原則に従って設計されており、以下のレイヤーで構成されています：
+出力形式を変更した場合、期待値ファイルの更新が必要です：
 
-- **CLI層** (`cmd/`): コマンドライン引数の解析
-- **ユースケース層** (`internal/usecase/`): ビジネスロジックの調整とセキュリティ検証
-- **ドメイン層** (`internal/`): コア機能（パーサー、スプリッター、ライター、設定）
-- **データ層** (`pkg/types/`): データ構造の定義
+```bash
+# 新しい出力で期待値を更新
+go test -run TestGoldenFiles -v
+cp tmp/integration-test/case*/* testdata/integration/case*/expected/
+```
 
-### 安定した出力の保証
+### 2. インポートサイクル
 
-CI/CDやバージョン管理との互換性を確保するため、以下の仕組みで決定的な出力を実現：
+テストファイルは別パッケージ（例：`package config_test`）として作成してください。
 
-- **リソースの並び順**: グループ内でアルファベット順にソート
-- **属性の並び順**: HCL属性をアルファベット順にソート
-- **ファイル名の並び順**: 出力ファイル名をアルファベット順にソート
-- **フォーマット**: `hclwrite.Format`による一貫したフォーマット
+### 3. 非決定的出力
 
-### セキュリティ機能
+コレクション（スライス、マップ）はソートしてから出力してください。
 
-- **パストラバーサル対策**: `filepath.Clean`と`filepath.Base`による安全なパス処理
-- **入力検証**: 不正なファイルパスや設定値の検証
-- **シンボリックリンク対策**: 危険なシンボリックリンクのスキップ
+### 4. パターンマッチングのデバッグ
 
-### バージョン管理システム
+```bash
+# 特定のパターンマッチングテスト
+go test ./internal/splitter -run TestGroupBlocksWithConfig -v
 
-#### Go Install対応
-
-Go 1.18以降の`runtime/debug.BuildInfo`を活用して、以下の優先順位でバージョンを検出：
-
-1. **GoReleaser**: ldflags注入されたバージョン（最優先）
-2. **go install @version**: モジュールバージョンから自動検出
-3. **開発ビルド**: VCS revisionから短縮ハッシュを生成
-
-これにより、`go install`でも正しいバージョンが表示されます。
+# 設定ファイル検証
+./terraform-file-organize validate-config testdata/configs/terraform-file-organize.yaml
+```
 
 ## 貢献ガイドライン
 
-### プルリクエストとイシュー
+### プルリクエスト前のチェック
 
-プルリクエストやイシューの報告を歓迎します。バグ報告や機能要求は GitHub Issues をご利用ください。
-
-### 貢献する前に
-
-1. **Issue確認**: 既存のIssueを確認し、重複を避けてください
-2. **フォーク**: リポジトリをフォークして作業用ブランチを作成
-3. **テスト**: 変更後は必ず全テストを実行
-4. **コミット**: Conventional Commitsの規約に従ってコミット
-5. **プルリクエスト**: 明確な説明とともにPRを作成
+1. **全テストの実行とパス**
+2. **ゴールデンファイルテスト実行**
+3. **golangci-lint実行**
+4. **Conventional Commitsでのコミット**
+5. **actionlint実行（ワークフロー変更時）**
 
 ### コード品質基準
 
