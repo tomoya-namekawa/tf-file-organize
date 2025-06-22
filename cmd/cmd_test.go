@@ -212,7 +212,7 @@ groups:
 	}
 
 	infraFile := filepath.Join(outputDir, "infrastructure.tf")
-	if _, err := os.Stat(infraFile); os.IsNotExist(err) {
+	if _, statErr := os.Stat(infraFile); os.IsNotExist(statErr) {
 		t.Errorf("Expected infrastructure.tf was not created")
 	}
 

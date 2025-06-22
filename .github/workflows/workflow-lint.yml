@@ -22,7 +22,7 @@ jobs:
       uses: actions/checkout@692973e3d937129bcbf40652eb9f2f61becf3332 # v4.1.7
       
     - name: Install mise
-      uses: jdx/mise-action@13abe502c30c1559a5c37dff303831bab82c9402 # v2
+      uses: jdx/mise-action@13abe502c30c1559a5c37dff303831bab82c9402 # v2.2.3
       with:
         install: true
         cache: true
@@ -39,7 +39,7 @@ jobs:
       uses: actions/checkout@692973e3d937129bcbf40652eb9f2f61becf3332 # v4.1.7
       
     - name: Install mise
-      uses: jdx/mise-action@13abe502c30c1559a5c37dff303831bab82c9402 # v2
+      uses: jdx/mise-action@13abe502c30c1559a5c37dff303831bab82c9402 # v2.2.3
       with:
         install: true
         cache: true

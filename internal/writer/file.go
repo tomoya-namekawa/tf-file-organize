@@ -27,7 +27,7 @@ func New(outputDir string, dryRun bool) *Writer {
 
 func (w *Writer) WriteGroups(groups []*types.BlockGroup) error {
 	if !w.dryRun {
-		if err := os.MkdirAll(w.outputDir, 0755); err != nil {
+		if err := os.MkdirAll(w.outputDir, 0750); err != nil {
 			return fmt.Errorf("failed to create output directory: %w", err)
 		}
 	}
@@ -42,10 +42,10 @@ func (w *Writer) WriteGroups(groups []*types.BlockGroup) error {
 }
 
 func (w *Writer) writeGroup(group *types.BlockGroup) error {
-	filepath := filepath.Join(w.outputDir, group.FileName)
+	filePath := filepath.Join(w.outputDir, group.FileName)
 
 	if w.dryRun {
-		fmt.Printf("Would create file: %s\n", filepath)
+		fmt.Printf("Would create file: %s\n", filePath)
 		fmt.Printf("  Block type: %s\n", group.BlockType)
 		if group.SubType != "" {
 			fmt.Printf("  Sub type: %s\n", group.SubType)
@@ -75,11 +75,11 @@ func (w *Writer) writeGroup(group *types.BlockGroup) error {
 	// hclwrite.Formatを使用してフォーマット
 	formattedContent := hclwrite.Format(content)
 
-	if err := os.WriteFile(filepath, formattedContent, 0600); err != nil {
-		return fmt.Errorf("failed to write file %s: %w", filepath, err)
+	if err := os.WriteFile(filePath, formattedContent, 0600); err != nil {
+		return fmt.Errorf("failed to write file %s: %w", filePath, err)
 	}
 
-	fmt.Printf("Created file: %s\n", filepath)
+	fmt.Printf("Created file: %s\n", filePath)
 	return nil
 }
 
@@ -110,8 +110,9 @@ func (w *Writer) setAttributeFromExpr(targetBody *hclwrite.Body, name string, ex
 
 		for i, subExpr := range e.Exprs {
 			if i > 0 {
-				tokens = append(tokens, &hclwrite.Token{Type: hclsyntax.TokenComma, Bytes: []byte(",")})
-				tokens = append(tokens, &hclwrite.Token{Type: hclsyntax.TokenNewline, Bytes: []byte(" ")})
+				tokens = append(tokens,
+					&hclwrite.Token{Type: hclsyntax.TokenComma, Bytes: []byte(",")},
+					&hclwrite.Token{Type: hclsyntax.TokenNewline, Bytes: []byte(" ")})
 			}
 
 			switch se := subExpr.(type) {

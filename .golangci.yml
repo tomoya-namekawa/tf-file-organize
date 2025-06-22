@@ -1,65 +1,100 @@
-# golangci-lint configuration for terraform-file-organize
-
+version: "2"
 run:
-  timeout: 5m
-  modules-download-mode: readonly
-
+  tests: true
 linters:
+  default: none
   enable:
-    - errcheck      # 戻り値のエラーチェック
-    - gosimple      # シンプルな書き方の提案
-    - govet         # go vetの実行
-    - ineffassign   # 無効な代入の検出
-    - staticcheck   # 静的解析
-    - typecheck     # 型チェック
-    - unused        # 未使用の変数・関数の検出
-    - gosec         # セキュリティの問題検出
-    - gocyclo       # 循環的複雑度チェック
-    - gofmt         # フォーマットチェック
-    - goimports     # インポートの整理チェック
-    - misspell      # スペルミスチェック
-    - unparam       # 未使用パラメータの検出
-    - gocritic      # Go批評
-    - revive        # golintの後継
-    - nolintlint    # nolintディレクティブの検証
-
-linters-settings:
-  gocyclo:
-    min-complexity: 15
-  
-  gosec:
-    excludes:
-      - G204  # Audit use of command execution - CLIツールなので必要
-  
-  revive:
+    - bodyclose
+    - dupl
+    - errcheck
+    - exhaustive
+    - funlen
+    - gochecknoinits
+    - goconst
+    - gocritic
+    - gocyclo
+    - goprintffuncname
+    - gosec
+    - govet
+    - ineffassign
+    - misspell
+    - nakedret
+    - noctx
+    - nolintlint
+    - rowserrcheck
+    - staticcheck
+    - unconvert
+    - unparam
+    - unused
+    - whitespace
+  settings:
+    dupl:
+      threshold: 100
+    funlen:
+      lines: 100
+      statements: 50
+    goconst:
+      min-len: 2
+      min-occurrences: 2
+    gocritic:
+      disabled-checks:
+        - dupImport
+        - ifElseChain
+        - octalLiteral
+        - whyNoLint
+      enabled-tags:
+        - diagnostic
+        - experimental
+        - opinionated
+        - performance
+        - style
+    gocyclo:
+      min-complexity: 15
+    govet:
+      enable:
+        - shadow
+    misspell:
+      locale: US
+  exclusions:
+    generated: lax
     rules:
-      - name: exported
-        disabled: true  # 全てのexported関数にコメントを要求しない
-      - name: package-comments
-        disabled: true  # パッケージコメントを要求しない
-
+      - linters:
+          - dupl
+          - funlen
+          - gocyclo
+          - gosec
+          - gocritic
+        path: _test\.go
+      - linters:
+          - gochecknoinits
+          - gosec
+        path: testdata/
+      - linters:
+          - dupl
+          - funlen
+          - gocyclo
+        path: integration.*test\.go
+      - linters:
+          - lll
+        source: '^//go:generate '
+    paths:
+      - third_party$
+      - builtin$
+      - examples$
 issues:
-  exclude-rules:
-    # テストファイルでは一部のlintを無効化
-    - path: _test\.go
-      linters:
-        - gosec
-        - errcheck
-        - gocyclo
-    
-    # testdataディレクトリは除外
-    - path: testdata/
-      linters:
-        - all
-    
-    # tmpディレクトリは除外
-    - path: tmp/
-      linters:
-        - all
-
   max-issues-per-linter: 0
   max-same-issues: 0
-
-output:
-  formats:
-    - format: colored-line-number
+formatters:
+  enable:
+    - gofmt
+    - goimports
+  settings:
+    goimports:
+      local-prefixes:
+        - github.com/namekawa/terraform-file-organize
+  exclusions:
+    generated: lax
+    paths:
+      - third_party$
+      - builtin$
+      - examples$

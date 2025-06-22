@@ -22,38 +22,15 @@ go build -o terraform-file-organize
 ./terraform-file-organize . --output-dir tmp/test --dry-run
 ./terraform-file-organize testdata/terraform --config testdata/configs/terraform-file-organize.yaml
 
-# Development commands
+# Essential development commands
 go mod tidy
-
-# Run all tests
-go test ./...
-
-# Run specific test packages
-go test ./internal/config
-go test ./internal/parser
-go test ./internal/splitter  
-go test ./internal/writer
-go test ./internal/usecase
-
-# Run integration tests
-go test -v ./integration_test.go
-go test -v ./integration_golden_test.go
-
-# Run single test
-go test -run TestGroupBlocks ./internal/splitter
-
-# Run golden file tests (critical for regression detection)
-go test -run TestGoldenFiles -v
-
-# Linting (install locally)
+go test -v -coverprofile=coverage.out ./...
 golangci-lint run
-
-# GitHub Actions linting
 actionlint
 
-# Run tests with coverage
-go test -v -race -coverprofile=coverage.out ./...
-go tool cover -func=coverage.out
+# Critical tests (run these before commits)
+go test -run TestGoldenFiles -v
+go build && ./terraform-file-organize testdata/terraform/sample.tf --dry-run
 ```
 
 ## Architecture
@@ -160,6 +137,12 @@ go test ./internal/usecase -v
 - Use separate test packages to avoid import cycles
 - All new functionality requires corresponding unit tests
 
+**Code Standards**:
+- Use constants for repeated strings (enforced by goconst linter)
+- Terraform block types defined as constants in `internal/splitter/resource.go`
+- Modern Go patterns: use `slices.Contains()` instead of loops, `b.Loop()` for benchmarks
+- Named return values for complex functions to improve readability
+
 ## Critical Files for Output Changes
 
 When modifying output behavior, these files are critical:
@@ -183,12 +166,75 @@ Runs only when GitHub Actions workflows or mise configuration changes:
 - Triggered by changes to `.github/**` or `.mise.toml` files
 
 **Linting Configuration** (`.golangci.yml`):
-- Comprehensive linter configuration with security-focused rules
-- Excludes test files and testdata from certain checks
-- Timeout configured for 5 minutes to handle large codebases
+- golangci-lint v2 configuration with security-focused rules
+- Key enabled linters: gosec, govet, gocritic, goconst, staticcheck, exhaustive
+- Test files excluded from certain checks (dupl, funlen, gocyclo, gosec, gocritic)
+- Uses `slices.Contains()` and modern Go patterns (enforced by modernize tool)
 
 **Security Features**:
 - All GitHub Actions pinned to commit SHA hashes
 - Automated pinact verification to prevent action tampering
 - gosec security scanning integrated into CI
 - renovatebot (not dependabot) used for dependency management
+
+## Development Workflow
+
+**Code Quality Pipeline**:
+```bash
+# 1. After Go code changes, run modernize analysis
+go run golang.org/x/tools/gopls/internal/analysis/modernize/cmd/modernize@latest -test ./...
+
+# 2. Run full linting (golangci-lint v2 configured)
+golangci-lint run
+
+# 3. Run tests with coverage
+go test -v -coverprofile=coverage.out ./...
+go tool cover -func=coverage.out
+
+# 4. Build verification
+go build -o terraform-file-organize
+
+# 5. Integration test with actual binary
+./terraform-file-organize testdata/terraform/sample.tf --dry-run
+```
+
+**Critical Development Commands**:
+```bash
+# Test golden files (regression detection)
+go test -run TestGoldenFiles -v
+
+# Test with coverage (target: >60%)
+go test -v -coverprofile=coverage.out ./...
+
+# Run specific package tests
+go test ./internal/config -v
+go test ./internal/parser -v
+go test ./internal/splitter -v
+go test ./internal/writer -v
+go test ./internal/usecase -v
+
+# Run integration tests
+go test -v ./integration_test.go
+go test -v ./integration_golden_test.go
+
+# Run single test by name
+go test -run TestGroupBlocks ./internal/splitter
+
+# Workflow linting (GitHub Actions)
+actionlint
+```
+
+**Mise Integration**:
+This project uses [mise](https://mise.jdx.dev/) for unified tool management. Key tools:
+- `go` (latest): Go toolchain
+- `golangci-lint` (v2.1.6): Comprehensive linting
+- `actionlint` (latest): GitHub Actions workflow linting
+- `pinact` (latest): Security verification for GitHub Actions
+
+```bash
+# Install all development tools
+mise install
+
+# Check tool versions
+mise list
+```

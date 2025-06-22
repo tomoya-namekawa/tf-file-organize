@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"gopkg.in/yaml.v3"
@@ -51,7 +52,7 @@ func LoadConfig(configPath string) (*Config, error) {
 		return nil, fmt.Errorf("config path must be a regular file: %s", configPath)
 	}
 
-	data, err := os.ReadFile(configPath)
+	data, err := os.ReadFile(configPath) //nolint:gosec // configPath is validated for safety
 	if err != nil {
 		return nil, fmt.Errorf("failed to read config file: %w", err)
 	}
@@ -181,10 +182,8 @@ func validateFilename(filename string) error {
 		nameWithoutExt = nameWithoutExt[:idx]
 	}
 
-	for _, sysName := range systemNames {
-		if nameWithoutExt == sysName {
-			return fmt.Errorf("filename cannot be a system reserved name: %s", filename)
-		}
+	if slices.Contains(systemNames, nameWithoutExt) {
+		return fmt.Errorf("filename cannot be a system reserved name: %s", filename)
 	}
 
 	return nil

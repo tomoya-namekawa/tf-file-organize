@@ -189,10 +189,10 @@ func BenchmarkFileProcessing(b *testing.B) {
 
 	uc := usecase.NewOrganizeFilesUsecase()
 
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		// 出力ディレクトリをクリア
-		os.RemoveAll(outputDir)
-		os.MkdirAll(outputDir, 0755)
+		_ = os.RemoveAll(outputDir)
+		_ = os.MkdirAll(outputDir, 0755)
 
 		req := &usecase.OrganizeFilesRequest{
 			InputPath:  inputDir,

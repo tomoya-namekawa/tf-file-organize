@@ -164,7 +164,7 @@ resource "aws_instance" "web2" {
 
 	// 複数のリソースが統合されたファイルが作成されることを確認
 	resourceFile := filepath.Join(outputDir, "resource__aws_instance.tf")
-	if _, err := os.Stat(resourceFile); os.IsNotExist(err) {
+	if _, statErr := os.Stat(resourceFile); os.IsNotExist(statErr) {
 		t.Errorf("Expected consolidated resource file was not created")
 	}
 
@@ -239,7 +239,7 @@ groups:
 
 	// 設定に従ったファイルが作成されることを確認
 	infraFile := filepath.Join(outputDir, "infrastructure.tf")
-	if _, err := os.Stat(infraFile); os.IsNotExist(err) {
+	if _, statErr := os.Stat(infraFile); os.IsNotExist(statErr) {
 		t.Errorf("Expected infrastructure.tf was not created")
 	}
 

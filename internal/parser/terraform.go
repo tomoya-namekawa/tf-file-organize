@@ -20,7 +20,7 @@ func New() *Parser {
 }
 
 func (p *Parser) ParseFile(filename string) (*types.ParsedFile, error) {
-	content, err := os.ReadFile(filename)
+	content, err := os.ReadFile(filename) //nolint:gosec // filename is validated before use
 	if err != nil {
 		return nil, fmt.Errorf("failed to read file %s: %w", filename, err)
 	}

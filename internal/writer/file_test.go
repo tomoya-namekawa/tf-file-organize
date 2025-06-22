@@ -12,7 +12,7 @@ import (
 	"github.com/tomoya-namekawa/terraform-file-organize/pkg/types"
 )
 
-func createTestBlockGroup(filename string, blockType string, blocks []*types.Block) *types.BlockGroup {
+func createTestBlockGroup(filename, blockType string, blocks []*types.Block) *types.BlockGroup {
 	return &types.BlockGroup{
 		FileName:  filename,
 		BlockType: blockType,

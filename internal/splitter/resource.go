@@ -10,6 +10,18 @@ import (
 	"github.com/tomoya-namekawa/terraform-file-organize/pkg/types"
 )
 
+// Terraform block type constants
+const (
+	blockTypeResource  = "resource"
+	blockTypeData      = "data"
+	blockTypeModule    = "module"
+	blockTypeProvider  = "provider"
+	blockTypeVariable  = "variable"
+	blockTypeOutput    = "output"
+	blockTypeLocals    = "locals"
+	blockTypeTerraform = "terraform"
+)
+
 type Splitter struct {
 	config *config.Config
 }
@@ -59,15 +71,15 @@ func (s *Splitter) GroupBlocks(parsedFile *types.ParsedFile) []*types.BlockGroup
 	return result
 }
 
-func (s *Splitter) getGroupKeyAndFilename(block *types.Block) (string, string) {
+func (s *Splitter) getGroupKeyAndFilename(block *types.Block) (groupKey, filename string) {
 	resourceType := s.getSubType(block)
 
 	// 設定ファイルでの除外チェック
 	if s.config != nil && resourceType != "" && s.config.IsExcluded(resourceType) {
 		// 除外対象は個別ファイルにする
 		key := s.getDefaultGroupKey(block)
-		filename := s.getDefaultFileName(block)
-		return key, filename
+		fname := s.getDefaultFileName(block)
+		return key, fname
 	}
 
 	// 設定ファイルでのグループ化チェック
@@ -86,36 +98,36 @@ func (s *Splitter) getGroupKeyAndFilename(block *types.Block) (string, string) {
 	}
 
 	// デフォルトの動作
-	key := s.getDefaultGroupKey(block)
-	filename := s.getDefaultFileName(block)
-	return key, filename
+	groupKey = s.getDefaultGroupKey(block)
+	filename = s.getDefaultFileName(block)
+	return
 }
 
 func (s *Splitter) getDefaultGroupKey(block *types.Block) string {
 	switch block.Type {
-	case "resource", "data":
+	case blockTypeResource, blockTypeData:
 		if len(block.Labels) > 0 {
 			return fmt.Sprintf("%s_%s", block.Type, block.Labels[0])
 		}
 		return block.Type
-	case "module":
+	case blockTypeModule:
 		if len(block.Labels) > 0 {
 			return fmt.Sprintf("%s_%s", block.Type, block.Labels[0])
 		}
 		return block.Type
-	case "provider":
+	case blockTypeProvider:
 		if len(block.Labels) > 0 {
 			return fmt.Sprintf("%s_%s", block.Type, block.Labels[0])
 		}
 		return "providers"
-	case "variable":
+	case blockTypeVariable:
 		return "variables"
-	case "output":
+	case blockTypeOutput:
 		return "outputs"
-	case "locals":
-		return "locals"
-	case "terraform":
-		return "terraform"
+	case blockTypeLocals:
+		return blockTypeLocals
+	case blockTypeTerraform:
+		return blockTypeTerraform
 	default:
 		return block.Type
 	}
@@ -123,15 +135,15 @@ func (s *Splitter) getDefaultGroupKey(block *types.Block) string {
 
 func (s *Splitter) getSubType(block *types.Block) string {
 	switch block.Type {
-	case "resource", "data":
+	case blockTypeResource, blockTypeData:
 		if len(block.Labels) > 0 {
 			return block.Labels[0]
 		}
-	case "module":
+	case blockTypeModule:
 		if len(block.Labels) > 0 {
 			return block.Labels[0]
 		}
-	case "provider":
+	case blockTypeProvider:
 		if len(block.Labels) > 0 {
 			return block.Labels[0]
 		}
@@ -141,39 +153,41 @@ func (s *Splitter) getSubType(block *types.Block) string {
 
 func (s *Splitter) getDefaultFileName(block *types.Block) string {
 	switch block.Type {
-	case "resource":
+	case blockTypeResource:
 		if len(block.Labels) > 0 {
 			return fmt.Sprintf("resource__%s.tf", s.sanitizeFileName(block.Labels[0]))
 		}
 		return "resource.tf"
-	case "data":
+	case blockTypeData:
 		if len(block.Labels) > 0 {
 			return fmt.Sprintf("data__%s.tf", s.sanitizeFileName(block.Labels[0]))
 		}
 		return "data.tf"
-	case "module":
+	case blockTypeModule:
 		if len(block.Labels) > 0 {
 			return fmt.Sprintf("module__%s.tf", s.sanitizeFileName(block.Labels[0]))
 		}
 		return "module.tf"
-	case "provider":
+	case blockTypeProvider:
 		return "providers.tf"
-	case "variable":
+	case blockTypeVariable:
 		return "variables.tf"
-	case "output":
+	case blockTypeOutput:
 		return "outputs.tf"
-	case "locals":
+	case blockTypeLocals:
 		return "locals.tf"
-	case "terraform":
+	case blockTypeTerraform:
 		return "terraform.tf"
 	default:
 		return fmt.Sprintf("%s.tf", s.sanitizeFileName(block.Type))
 	}
 }
 
+const unnamedFile = "unnamed"
+
 func (s *Splitter) sanitizeFileName(name string) string {
 	if name == "" {
-		return "unnamed"
+		return unnamedFile
 	}
 
 	// filepath.Cleanを使用してパストラバーサルを防ぐ

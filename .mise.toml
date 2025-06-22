@@ -1,12 +1,13 @@
 [tools]
 # Go toolchain
-go = "1.24.4"
+go = "latest"
 
 # Development tools (CI uses dedicated actions)
 pinact = "latest"
 
 # GitHub Actions linting tools
 actionlint = "latest"
+golangci-lint = "v2.1.6"
 
 [env]
 # Go environment variables

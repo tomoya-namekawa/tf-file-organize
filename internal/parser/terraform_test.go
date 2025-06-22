@@ -9,6 +9,11 @@ import (
 	"github.com/tomoya-namekawa/terraform-file-organize/pkg/types"
 )
 
+const (
+	resourceBlockType = "resource"
+	webLabel          = "web"
+)
+
 func TestParseFile(t *testing.T) {
 	// テスト用の一時Terraformファイルを作成
 	tmpDir := t.TempDir()
@@ -99,7 +104,7 @@ output "instance_id" {
 	// リソースブロックのラベル検証
 	var resourceBlock *types.Block
 	for _, block := range parsedFile.Blocks {
-		if block.Type == "resource" {
+		if block.Type == resourceBlockType {
 			resourceBlock = block
 			break
 		}
@@ -117,7 +122,7 @@ output "instance_id" {
 		t.Errorf("Expected first label 'aws_instance', got '%s'", resourceBlock.Labels[0])
 	}
 
-	if resourceBlock.Labels[1] != "web" {
+	if resourceBlock.Labels[1] != webLabel {
 		t.Errorf("Expected second label 'web', got '%s'", resourceBlock.Labels[1])
 	}
 }

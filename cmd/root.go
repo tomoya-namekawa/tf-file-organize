@@ -35,6 +35,11 @@ Input can be either a single .tf file or a directory containing .tf files.`,
 }
 
 func Execute() error {
+	// Setup flags
+	rootCmd.Flags().StringVarP(&outputDir, "output-dir", "o", "", "Output directory for split files (default: same as input path)")
+	rootCmd.Flags().StringVarP(&configFile, "config", "c", "", "Configuration file for custom grouping rules")
+	rootCmd.Flags().BoolVarP(&dryRun, "dry-run", "d", false, "Show what would be done without actually creating files")
+
 	return rootCmd.Execute()
 }
 
@@ -140,12 +145,6 @@ func validateConfigPath(path string) error {
 	}
 
 	return nil
-}
-
-func init() {
-	rootCmd.Flags().StringVarP(&outputDir, "output-dir", "o", "", "Output directory for split files (default: same as input path)")
-	rootCmd.Flags().StringVarP(&configFile, "config", "c", "", "Configuration file for custom grouping rules")
-	rootCmd.Flags().BoolVarP(&dryRun, "dry-run", "d", false, "Show what would be done without actually creating files")
 }
 
 func run() error {
