@@ -386,15 +386,15 @@ func (uc *OrganizeFilesUsecase) getFilesToRemove(sourceFiles []string, groups []
 	for _, sourceFile := range sourceFiles {
 		fileName := filepath.Base(sourceFile)
 
+		// Exclude newly generated files for idempotency
+		if generatedFiles[fileName] {
+			continue
+		}
+
 		// Exclude tool-generated files
 		if strings.HasPrefix(fileName, "data__") ||
 			strings.HasPrefix(fileName, "resource__") ||
 			strings.HasPrefix(fileName, "module__") {
-			continue
-		}
-
-		// Exclude newly generated files for idempotency
-		if generatedFiles[fileName] {
 			continue
 		}
 
