@@ -52,7 +52,7 @@ golangci-lint run
 actionlint
 
 # Security scanning
-go install github.com/securecodewarrior/gosec/v2/cmd/gosec@latest
+go install github.com/securecodewarrior/gosec/cmd/gosec@latest
 gosec ./...
 
 # Run tests with coverage
