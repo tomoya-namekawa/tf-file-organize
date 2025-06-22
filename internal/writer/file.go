@@ -14,15 +14,140 @@ import (
 	"github.com/tomoya-namekawa/terraform-file-organize/pkg/types"
 )
 
+// ネストしたブロックタイプの定義
+var nestedBlockSchema = &hcl.BodySchema{
+	Blocks: []hcl.BlockHeaderSchema{
+		// AWS provider blocks
+		{Type: "filter"},
+		{Type: "ingress"},
+		{Type: "egress"},
+		{Type: "lifecycle"},
+		{Type: "provisioner", LabelNames: []string{"type"}},
+		{Type: "connection"},
+		{Type: "dynamic", LabelNames: []string{"for_each"}},
+		{Type: "route"},
+		{Type: "versioning_configuration"},
+		{Type: "required_providers"},
+
+		// Google Cloud provider blocks
+		{Type: "template"},
+		{Type: "spec"},
+		{Type: "containers"},
+		{Type: "env"},
+		{Type: "resources"},
+		{Type: "ports"},
+		{Type: "traffic"},
+		{Type: "metadata"},
+		{Type: "binding"},
+		{Type: "limits"},
+		{Type: "requests"},
+
+		// Azure provider blocks
+		{Type: "site_config"},
+		{Type: "identity"},
+		{Type: "auth_settings"},
+		{Type: "backup"},
+		{Type: "connection_string"},
+		{Type: "logs"},
+
+		// Kubernetes provider blocks
+		{Type: "selector"},
+		{Type: "volume"},
+		{Type: "volume_mount"},
+		{Type: "config_map"},
+		{Type: "secret"},
+		{Type: "service_account"},
+		{Type: "security_context"},
+
+		// Common blocks
+		{Type: "tags"},
+		{Type: "timeouts"},
+		{Type: "depends_on"},
+		{Type: "count"},
+		{Type: "for_each"},
+		{Type: "condition"},
+		{Type: "precondition"},
+		{Type: "postcondition"},
+		{Type: "check"},
+		{Type: "validation"},
+		{Type: "sensitive"},
+		{Type: "nullable"},
+		{Type: "description"},
+
+		// Network and security blocks
+		{Type: "security_group_rule"},
+		{Type: "subnet"},
+		{Type: "vpc"},
+		{Type: "network"},
+		{Type: "firewall"},
+		{Type: "load_balancer"},
+		{Type: "target_group"},
+		{Type: "listener"},
+		{Type: "health_check"},
+
+		// Storage blocks
+		{Type: "disk"},
+		{Type: "volume_attachment"},
+		{Type: "snapshot"},
+		{Type: "backup_policy"},
+		{Type: "encryption"},
+
+		// Database blocks
+		{Type: "database"},
+		{Type: "user"},
+		{Type: "replica"},
+		{Type: "parameter_group"},
+		{Type: "subnet_group"},
+		{Type: "option_group"},
+
+		// Monitoring and logging
+		{Type: "alarm"},
+		{Type: "metric"},
+		{Type: "dashboard"},
+		{Type: "log_group"},
+		{Type: "log_stream"},
+		{Type: "notification"},
+
+		// IAM and permissions
+		{Type: "policy"},
+		{Type: "role"},
+		{Type: "user_policy_attachment"},
+		{Type: "role_policy_attachment"},
+		{Type: "group_policy_attachment"},
+		{Type: "assume_role_policy"},
+		{Type: "trust_policy"},
+
+		// Generic blocks for unknown types
+		{Type: "block"},
+		{Type: "nested_block"},
+		{Type: "configuration"},
+		{Type: "settings"},
+		{Type: "options"},
+		{Type: "parameters"},
+		{Type: "attributes"},
+	},
+}
+
 type Writer struct {
-	outputDir string
-	dryRun    bool
+	outputDir   string
+	dryRun      bool
+	addComments bool // コメント追加を有効にするかどうか
 }
 
 func New(outputDir string, dryRun bool) *Writer {
 	return &Writer{
-		outputDir: outputDir,
-		dryRun:    dryRun,
+		outputDir:   outputDir,
+		dryRun:      dryRun,
+		addComments: false, // デフォルトでは無効
+	}
+}
+
+// NewWithComments はコメント追加機能付きのWriterを作成
+func NewWithComments(outputDir string, dryRun, addComments bool) *Writer {
+	return &Writer{
+		outputDir:   outputDir,
+		dryRun:      dryRun,
+		addComments: addComments,
 	}
 }
 
@@ -64,10 +189,24 @@ func (w *Writer) writeGroup(group *types.BlockGroup) error {
 			rootBody.AppendNewline()
 		}
 
-		newBlock := rootBody.AppendNewBlock(block.Type, block.Labels)
+		// ブロック前にコメントを追加（有効な場合のみ）
+		if w.addComments {
+			if comment := w.getBlockComment(block); comment != "" {
+				rootBody.AppendUnstructuredTokens(hclwrite.Tokens{
+					{Type: hclsyntax.TokenComment, Bytes: []byte(comment)},
+					{Type: hclsyntax.TokenNewline, Bytes: []byte("\n")},
+				})
+			}
+		}
 
-		if err := w.copyBlockBody(block.Body, newBlock.Body()); err != nil {
-			return fmt.Errorf("failed to copy block body: %w", err)
+		// 生のソースコードが利用可能な場合はそれを使用
+		if block.RawBody != "" {
+			w.appendRawBlock(rootBody, block)
+		} else {
+			newBlock := rootBody.AppendNewBlock(block.Type, block.Labels)
+			if err := w.copyBlockBody(block.Body, newBlock.Body()); err != nil {
+				return fmt.Errorf("failed to copy block body: %w", err)
+			}
 		}
 	}
 
@@ -84,8 +223,89 @@ func (w *Writer) writeGroup(group *types.BlockGroup) error {
 	return nil
 }
 
+// getBlockComment はブロックに適切なコメントを返す
+func (w *Writer) getBlockComment(block *types.Block) string {
+	// 保存されたコメントがある場合はそれを使用
+	if block.LeadComment != "" {
+		return block.LeadComment
+	}
+
+	return w.getDefaultComment(block)
+}
+
+// commentGenerator はコメント生成のヘルパー構造体
+type commentGenerator struct{}
+
+// getDefaultComment はブロックタイプに基づくデフォルトコメントを生成
+func (w *Writer) getDefaultComment(block *types.Block) string {
+	generator := commentGenerator{}
+
+	switch block.Type {
+	case "terraform":
+		return "# Terraform configuration"
+	case "provider":
+		return generator.getProviderComment(block.Labels)
+	case "variable":
+		return generator.getLabeledComment("Variable", block.Labels)
+	case "locals":
+		return "# Local values"
+	case "output":
+		return generator.getLabeledComment("Output", block.Labels)
+	case "data":
+		return generator.getDataComment(block.Labels)
+	case "resource":
+		return generator.getResourceComment(block.Labels)
+	case "module":
+		return generator.getLabeledComment("Module", block.Labels)
+	}
+
+	return ""
+}
+
+// getProviderComment はプロバイダー用のコメントを生成
+func (c commentGenerator) getProviderComment(labels []string) string {
+	if len(labels) == 0 {
+		return "# Provider configuration"
+	}
+
+	switch labels[0] {
+	case "aws":
+		return "# AWS Provider configuration"
+	case "google":
+		return "# Google Cloud Provider configuration"
+	case "azurerm":
+		return "# Azure Provider configuration"
+	default:
+		return fmt.Sprintf("# %s Provider configuration", labels[0])
+	}
+}
+
+// getLabeledComment はラベル付きブロック用のコメントを生成
+func (c commentGenerator) getLabeledComment(blockType string, labels []string) string {
+	if len(labels) > 0 {
+		return fmt.Sprintf("# %s: %s", blockType, labels[0])
+	}
+	return fmt.Sprintf("# %s definition", blockType)
+}
+
+// getDataComment はデータソース用のコメントを生成
+func (c commentGenerator) getDataComment(labels []string) string {
+	if len(labels) >= 2 {
+		return fmt.Sprintf("# Data source: %s", labels[1])
+	}
+	return "# Data source"
+}
+
+// getResourceComment はリソース用のコメントを生成
+func (c commentGenerator) getResourceComment(labels []string) string {
+	if len(labels) >= 2 {
+		return fmt.Sprintf("# Resource: %s", labels[1])
+	}
+	return "# Resource definition"
+}
+
 func (w *Writer) copyBlockBody(sourceBody hcl.Body, targetBody *hclwrite.Body) error {
-	// より直接的なアプローチを採用
+	// RawBodyが優先されるため、この関数はフォールバック用として単純化
 	return w.copyBlockBodyGeneric(sourceBody, targetBody)
 }
 
@@ -96,7 +316,7 @@ func (w *Writer) setAttributeFromExpr(targetBody *hclwrite.Body, name string, ex
 	case *hclsyntax.LiteralValueExpr:
 		targetBody.SetAttributeValue(name, e.Val)
 	case *hclsyntax.TemplateExpr:
-		w.setTemplateAttribute(targetBody, name, e, expr)
+		w.setTemplateAttribute(targetBody, name, e)
 	case *hclsyntax.TupleConsExpr:
 		w.setTupleAttribute(targetBody, name, e)
 	case *hclsyntax.ScopeTraversalExpr:
@@ -106,8 +326,8 @@ func (w *Writer) setAttributeFromExpr(targetBody *hclwrite.Body, name string, ex
 		// 関数呼び出しの場合、空文字列
 		targetBody.SetAttributeValue(name, cty.StringVal(""))
 	case *hclsyntax.ObjectConsExpr:
-		// オブジェクトの場合、空の構造体を設定
-		targetBody.SetAttributeValue(name, cty.ObjectVal(map[string]cty.Value{}))
+		// オブジェクトの場合、より簡単な方法で処理
+		w.setObjectAttributeSimple(targetBody, name, e)
 	default:
 		// その他の場合は空の文字列として扱う
 		targetBody.SetAttributeValue(name, cty.StringVal(""))
@@ -115,74 +335,17 @@ func (w *Writer) setAttributeFromExpr(targetBody *hclwrite.Body, name string, ex
 }
 
 // setTemplateAttribute はテンプレート式の属性を設定
-func (w *Writer) setTemplateAttribute(targetBody *hclwrite.Body, name string, e *hclsyntax.TemplateExpr, expr hcl.Expression) {
+func (w *Writer) setTemplateAttribute(targetBody *hclwrite.Body, name string, e *hclsyntax.TemplateExpr) {
+	// 単純なリテラル値の場合は直接設定
 	if len(e.Parts) == 1 {
 		if literal, ok := e.Parts[0].(*hclsyntax.LiteralValueExpr); ok {
 			targetBody.SetAttributeValue(name, literal.Val)
 			return
 		}
 	}
-	// 複雑なテンプレートの場合、元の式をそのまま保持
-	if sourceRange := expr.Range(); sourceRange.Filename != "" {
-		w.setComplexTemplateAttribute(targetBody, name, e)
-	} else {
-		// フォールバック: 空文字列
-		targetBody.SetAttributeValue(name, cty.StringVal(""))
-	}
-}
 
-// setComplexTemplateAttribute は複雑なテンプレート式の属性を設定
-func (w *Writer) setComplexTemplateAttribute(targetBody *hclwrite.Body, name string, e *hclsyntax.TemplateExpr) {
-	// 元のソースからトークンを再構築
-	var tokens hclwrite.Tokens
-	tokens = append(tokens, &hclwrite.Token{
-		Type:  hclsyntax.TokenOQuote,
-		Bytes: []byte(`"`),
-	})
-
-	// テンプレートの各部分を処理
-	for _, part := range e.Parts {
-		switch p := part.(type) {
-		case *hclsyntax.LiteralValueExpr:
-			if p.Val.Type() == cty.String {
-				tokens = append(tokens, &hclwrite.Token{
-					Type:  hclsyntax.TokenQuotedLit,
-					Bytes: []byte(p.Val.AsString()),
-				})
-			}
-		case *hclsyntax.ScopeTraversalExpr:
-			tokens = append(tokens, &hclwrite.Token{
-				Type:  hclsyntax.TokenTemplateInterp,
-				Bytes: []byte("${"),
-			})
-			tokens = append(tokens, hclwrite.TokensForTraversal(p.Traversal)...)
-			tokens = append(tokens, &hclwrite.Token{
-				Type:  hclsyntax.TokenTemplateSeqEnd,
-				Bytes: []byte("}"),
-			})
-		default:
-			// 他の式タイプの場合はプレースホルダー
-			tokens = append(tokens,
-				&hclwrite.Token{
-					Type:  hclsyntax.TokenTemplateInterp,
-					Bytes: []byte("${"),
-				},
-				&hclwrite.Token{
-					Type:  hclsyntax.TokenIdent,
-					Bytes: []byte("var.placeholder"),
-				},
-				&hclwrite.Token{
-					Type:  hclsyntax.TokenTemplateSeqEnd,
-					Bytes: []byte("}"),
-				})
-		}
-	}
-
-	tokens = append(tokens, &hclwrite.Token{
-		Type:  hclsyntax.TokenCQuote,
-		Bytes: []byte(`"`),
-	})
-
+	// 複雑なテンプレートの場合は共通のtoken builder を使用
+	tokens := w.buildTemplateTokens(e)
 	targetBody.SetAttributeRaw(name, tokens)
 }
 
@@ -213,130 +376,94 @@ func (w *Writer) setTupleAttribute(targetBody *hclwrite.Body, name string, e *hc
 	targetBody.SetAttributeRaw(name, tokens)
 }
 
-// copyBlockBodyGeneric は汎用的なコピー方法
-func (w *Writer) copyBlockBodyGeneric(sourceBody hcl.Body, targetBody *hclwrite.Body) error {
-	// 包括的なschemaを定義して属性とブロックを取得
-	schema := &hcl.BodySchema{
-		Blocks: []hcl.BlockHeaderSchema{
-			// AWS provider blocks
-			{Type: "filter"},
-			{Type: "ingress"},
-			{Type: "egress"},
-			{Type: "lifecycle"},
-			{Type: "provisioner", LabelNames: []string{"type"}},
-			{Type: "connection"},
-			{Type: "dynamic", LabelNames: []string{"for_each"}},
-			{Type: "route"},
-			{Type: "versioning_configuration"},
-			{Type: "required_providers"},
+// setObjectAttributeSimple はオブジェクト式をRawトークンとして設定
+func (w *Writer) setObjectAttributeSimple(targetBody *hclwrite.Body, name string, e *hclsyntax.ObjectConsExpr) {
+	// オブジェクトのトークンを構築
+	var tokens hclwrite.Tokens
+	tokens = append(tokens, &hclwrite.Token{Type: hclsyntax.TokenOBrace, Bytes: []byte("{")})
 
-			// Google Cloud provider blocks
-			{Type: "template"},
-			{Type: "spec"},
-			{Type: "containers"},
-			{Type: "env"},
-			{Type: "resources"},
-			{Type: "ports"},
-			{Type: "traffic"},
-			{Type: "metadata"},
-			{Type: "binding"},
-			{Type: "limits"},
-			{Type: "requests"},
+	for i, item := range e.Items {
+		if i > 0 {
+			tokens = append(tokens, &hclwrite.Token{Type: hclsyntax.TokenComma, Bytes: []byte(",")})
+		}
+		tokens = append(tokens, &hclwrite.Token{Type: hclsyntax.TokenNewline, Bytes: []byte("\n    ")})
 
-			// Azure provider blocks
-			{Type: "site_config"},
-			{Type: "identity"},
-			{Type: "auth_settings"},
-			{Type: "backup"},
-			{Type: "connection_string"},
-			{Type: "logs"},
+		// キーの処理 - より堅牢なアプローチ
+		var keyTokens hclwrite.Tokens
 
-			// Kubernetes provider blocks
-			{Type: "selector"},
-			{Type: "volume"},
-			{Type: "volume_mount"},
-			{Type: "config_map"},
-			{Type: "secret"},
-			{Type: "service_account"},
-			{Type: "security_context"},
+		// まずキーを評価してみる
+		if keyValue, keyDiags := item.KeyExpr.Value(nil); !keyDiags.HasErrors() && keyValue.Type() == cty.String {
+			// 正常に評価できた文字列キー
+			keyTokens = hclwrite.TokensForValue(keyValue)
+		} else {
+			// 評価できない場合は、式の型に応じて処理
+			switch keyExpr := item.KeyExpr.(type) {
+			case *hclsyntax.LiteralValueExpr:
+				keyTokens = hclwrite.TokensForValue(keyExpr.Val)
+			case *hclsyntax.TemplateExpr:
+				if len(keyExpr.Parts) == 1 {
+					if literal, ok := keyExpr.Parts[0].(*hclsyntax.LiteralValueExpr); ok {
+						keyTokens = hclwrite.TokensForValue(literal.Val)
+					}
+				}
+			default:
+				// フォールバック
+				keyTokens = append(keyTokens, &hclwrite.Token{Type: hclsyntax.TokenIdent, Bytes: []byte(`"unknown"`)})
+			}
+		}
 
-			// Common blocks
-			{Type: "tags"},
-			{Type: "timeouts"},
-			{Type: "depends_on"},
-			{Type: "count"},
-			{Type: "for_each"},
-			{Type: "condition"},
-			{Type: "precondition"},
-			{Type: "postcondition"},
-			{Type: "check"},
-			{Type: "validation"},
-			{Type: "sensitive"},
-			{Type: "nullable"},
-			{Type: "description"},
+		tokens = append(tokens, keyTokens...)
 
-			// Network and security blocks
-			{Type: "security_group_rule"},
-			{Type: "subnet"},
-			{Type: "vpc"},
-			{Type: "network"},
-			{Type: "firewall"},
-			{Type: "load_balancer"},
-			{Type: "target_group"},
-			{Type: "listener"},
-			{Type: "health_check"},
+		tokens = append(tokens, &hclwrite.Token{Type: hclsyntax.TokenEqual, Bytes: []byte(" = ")})
 
-			// Storage blocks
-			{Type: "disk"},
-			{Type: "volume_attachment"},
-			{Type: "snapshot"},
-			{Type: "backup_policy"},
-			{Type: "encryption"},
-
-			// Database blocks
-			{Type: "database"},
-			{Type: "user"},
-			{Type: "replica"},
-			{Type: "parameter_group"},
-			{Type: "subnet_group"},
-			{Type: "option_group"},
-
-			// Monitoring and logging
-			{Type: "alarm"},
-			{Type: "metric"},
-			{Type: "dashboard"},
-			{Type: "log_group"},
-			{Type: "log_stream"},
-			{Type: "notification"},
-
-			// IAM and permissions
-			{Type: "policy"},
-			{Type: "role"},
-			{Type: "user_policy_attachment"},
-			{Type: "role_policy_attachment"},
-			{Type: "group_policy_attachment"},
-			{Type: "assume_role_policy"},
-			{Type: "trust_policy"},
-
-			// Generic blocks for unknown types
-			{Type: "block"},
-			{Type: "nested_block"},
-			{Type: "configuration"},
-			{Type: "settings"},
-			{Type: "options"},
-			{Type: "parameters"},
-			{Type: "attributes"},
-		},
+		// 値の処理
+		switch valueExpr := item.ValueExpr.(type) {
+		case *hclsyntax.LiteralValueExpr:
+			tokens = append(tokens, hclwrite.TokensForValue(valueExpr.Val)...)
+		case *hclsyntax.TemplateExpr:
+			// テンプレート式を再構築
+			templateTokens := w.buildTemplateTokens(valueExpr)
+			tokens = append(tokens, templateTokens...)
+		case *hclsyntax.ScopeTraversalExpr:
+			tokens = append(tokens, hclwrite.TokensForTraversal(valueExpr.Traversal)...)
+		default:
+			tokens = append(tokens, hclwrite.TokensForValue(cty.StringVal(""))...)
+		}
 	}
 
-	// PartialContentで属性とブロックを取得
-	content, remaining, diags := sourceBody.PartialContent(schema)
+	tokens = append(tokens,
+		&hclwrite.Token{Type: hclsyntax.TokenNewline, Bytes: []byte("\n  ")},
+		&hclwrite.Token{Type: hclsyntax.TokenCBrace, Bytes: []byte("}")})
+
+	targetBody.SetAttributeRaw(name, tokens)
+}
+
+// copyBlockBodyGeneric は汎用的なコピー方法
+func (w *Writer) copyBlockBodyGeneric(sourceBody hcl.Body, targetBody *hclwrite.Body) error {
+	content, remaining, diags := sourceBody.PartialContent(nestedBlockSchema)
 	if diags.HasErrors() {
 		// エラーがあっても続行してベストエフォートで処理
 		fmt.Printf("Warning: HCL parsing diagnostics: %v\n", diags)
 	}
 
-	// まず全ての属性を取得してアルファベット順でソートしてコピー
+	// 属性をコピー
+	w.copyAttributes(sourceBody, targetBody)
+
+	// 既知のブロックをコピー
+	if err := w.copyBlocks(content.Blocks, targetBody); err != nil {
+		return fmt.Errorf("failed to copy known blocks: %w", err)
+	}
+
+	// 未知のブロックをコピー
+	if err := w.copyUnknownBlocks(remaining, targetBody); err != nil {
+		return fmt.Errorf("failed to copy unknown blocks: %w", err)
+	}
+
+	return nil
+}
+
+// copyAttributes はソースボディから属性をコピー
+func (w *Writer) copyAttributes(sourceBody hcl.Body, targetBody *hclwrite.Body) {
 	allAttrs, _ := sourceBody.JustAttributes()
 
 	// 属性名をソートして決定的な順序にする
@@ -359,25 +486,107 @@ func (w *Writer) copyBlockBodyGeneric(sourceBody hcl.Body, targetBody *hclwrite.
 			}
 		}
 	}
+}
 
-	// 既知のブロックをコピー
-	for _, block := range content.Blocks {
+// copyBlocks は既知のブロックをコピー
+func (w *Writer) copyBlocks(blocks []*hcl.Block, targetBody *hclwrite.Body) error {
+	for _, block := range blocks {
 		nestedBlock := targetBody.AppendNewBlock(block.Type, block.Labels)
 		if err := w.copyBlockBody(block.Body, nestedBlock.Body()); err != nil {
 			return fmt.Errorf("failed to copy nested block: %w", err)
 		}
 	}
+	return nil
+}
 
-	// 残りのブロック（未知のブロック）をコピー
-	if remaining != nil {
-		unknownContent, _, _ := remaining.PartialContent(&hcl.BodySchema{})
-		for _, block := range unknownContent.Blocks {
-			nestedBlock := targetBody.AppendNewBlock(block.Type, block.Labels)
-			if err := w.copyBlockBody(block.Body, nestedBlock.Body()); err != nil {
-				return fmt.Errorf("failed to copy nested block: %w", err)
-			}
-		}
+// copyUnknownBlocks は未知のブロックをコピー
+func (w *Writer) copyUnknownBlocks(remaining hcl.Body, targetBody *hclwrite.Body) error {
+	if remaining == nil {
+		return nil
 	}
 
+	unknownContent, _, _ := remaining.PartialContent(&hcl.BodySchema{})
+	for _, block := range unknownContent.Blocks {
+		nestedBlock := targetBody.AppendNewBlock(block.Type, block.Labels)
+		if err := w.copyBlockBody(block.Body, nestedBlock.Body()); err != nil {
+			return fmt.Errorf("failed to copy nested block: %w", err)
+		}
+	}
 	return nil
+}
+
+// buildTemplateTokens はテンプレート式のトークンを構築する共通関数
+func (w *Writer) buildTemplateTokens(valueExpr *hclsyntax.TemplateExpr) hclwrite.Tokens {
+	var tokens hclwrite.Tokens
+	tokens = append(tokens, &hclwrite.Token{Type: hclsyntax.TokenOQuote, Bytes: []byte(`"`)})
+	for _, part := range valueExpr.Parts {
+		switch p := part.(type) {
+		case *hclsyntax.LiteralValueExpr:
+			if p.Val.Type() == cty.String {
+				tokens = append(tokens, &hclwrite.Token{
+					Type:  hclsyntax.TokenQuotedLit,
+					Bytes: []byte(p.Val.AsString()),
+				})
+			}
+		case *hclsyntax.ScopeTraversalExpr:
+			tokens = append(tokens, &hclwrite.Token{
+				Type:  hclsyntax.TokenTemplateInterp,
+				Bytes: []byte("${"),
+			})
+			tokens = append(tokens, hclwrite.TokensForTraversal(p.Traversal)...)
+			tokens = append(tokens, &hclwrite.Token{
+				Type:  hclsyntax.TokenTemplateSeqEnd,
+				Bytes: []byte("}"),
+			})
+		}
+	}
+	tokens = append(tokens, &hclwrite.Token{Type: hclsyntax.TokenCQuote, Bytes: []byte(`"`)})
+	return tokens
+}
+
+// appendRawBlock は生のソースコードを使用してブロックを追加
+func (w *Writer) appendRawBlock(targetBody *hclwrite.Body, block *types.Block) {
+	// ブロックのヘッダーを構築
+	var blockTokens hclwrite.Tokens
+
+	// ブロックタイプを追加
+	blockTokens = append(blockTokens, &hclwrite.Token{
+		Type:  hclsyntax.TokenIdent,
+		Bytes: []byte(block.Type),
+	})
+
+	// ラベルを追加
+	for _, label := range block.Labels {
+		blockTokens = append(blockTokens,
+			&hclwrite.Token{
+				Type:  hclsyntax.TokenOQuote,
+				Bytes: []byte(" \""),
+			},
+			&hclwrite.Token{
+				Type:  hclsyntax.TokenQuotedLit,
+				Bytes: []byte(label),
+			},
+			&hclwrite.Token{
+				Type:  hclsyntax.TokenCQuote,
+				Bytes: []byte("\""),
+			})
+	}
+
+	// ブロック開始、ボディ、終了を追加
+	blockTokens = append(blockTokens,
+		&hclwrite.Token{
+			Type:  hclsyntax.TokenOBrace,
+			Bytes: []byte(" {"),
+		},
+		&hclwrite.Token{
+			Type:  hclsyntax.TokenNewline,
+			Bytes: []byte(block.RawBody),
+		},
+		&hclwrite.Token{
+			Type:  hclsyntax.TokenCBrace,
+			Bytes: []byte("}"),
+		})
+
+	// ターゲットボディにトークンを追加
+	targetBody.AppendUnstructuredTokens(blockTokens)
 }

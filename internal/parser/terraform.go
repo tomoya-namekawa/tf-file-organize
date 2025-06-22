@@ -6,6 +6,7 @@ import (
 
 	"github.com/hashicorp/hcl/v2"
 	"github.com/hashicorp/hcl/v2/hclparse"
+	"github.com/hashicorp/hcl/v2/hclsyntax"
 
 	"github.com/tomoya-namekawa/terraform-file-organize/pkg/types"
 )
@@ -57,16 +58,63 @@ func (p *Parser) ParseFile(filename string) (*types.ParsedFile, error) {
 		return nil, fmt.Errorf("failed to extract content: %s", diags.Error())
 	}
 
-	for _, block := range content_hcl.Blocks {
-		parsedBlock := &types.Block{
-			Type:      block.Type,
-			Labels:    block.Labels,
-			Body:      block.Body,
-			DefRange:  block.DefRange,
-			TypeRange: block.TypeRange,
+	// HCL Syntaxファイルからもブロック情報を取得
+	syntaxFile, syntaxDiags := hclsyntax.ParseConfig(content, filename, hcl.InitialPos)
+	if syntaxDiags.HasErrors() {
+		// Syntaxパースに失敗した場合は通常のパースで続行
+		for _, block := range content_hcl.Blocks {
+			parsedBlock := &types.Block{
+				Type:      block.Type,
+				Labels:    block.Labels,
+				Body:      block.Body,
+				DefRange:  block.DefRange,
+				TypeRange: block.TypeRange,
+				RawBody:   "",
+			}
+			parsedFile.Blocks = append(parsedFile.Blocks, parsedBlock)
 		}
-		parsedFile.Blocks = append(parsedFile.Blocks, parsedBlock)
+	} else {
+		// Syntaxブロックから詳細情報を抽出
+		for i, block := range content_hcl.Blocks {
+			var rawBody string
+			if i < len(syntaxFile.Body.(*hclsyntax.Body).Blocks) {
+				syntaxBlock := syntaxFile.Body.(*hclsyntax.Body).Blocks[i]
+				rawBody = p.extractRawBodyFromSyntax(content, syntaxBlock)
+			}
+
+			parsedBlock := &types.Block{
+				Type:      block.Type,
+				Labels:    block.Labels,
+				Body:      block.Body,
+				DefRange:  block.DefRange,
+				TypeRange: block.TypeRange,
+				RawBody:   rawBody,
+			}
+			parsedFile.Blocks = append(parsedFile.Blocks, parsedBlock)
+		}
 	}
 
 	return parsedFile, nil
+}
+
+// extractRawBodyFromSyntax はSyntaxブロックから生ソースコードを抽出
+func (p *Parser) extractRawBodyFromSyntax(content []byte, syntaxBlock *hclsyntax.Block) string {
+	// OpenBraceRangeとCloseBraceRangeを使用してブロック本体を抽出
+	openBraceRange := syntaxBlock.OpenBraceRange
+	closeBraceRange := syntaxBlock.CloseBraceRange
+
+	if openBraceRange.End.Byte >= len(content) || closeBraceRange.Start.Byte > len(content) {
+		return ""
+	}
+
+	// '{' の後から '}' の前までの内容を抽出
+	startByte := openBraceRange.End.Byte
+	endByte := closeBraceRange.Start.Byte
+
+	if startByte < endByte {
+		rawContent := content[startByte:endByte]
+		return string(rawContent)
+	}
+
+	return ""
 }

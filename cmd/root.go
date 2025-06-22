@@ -12,10 +12,11 @@ import (
 )
 
 var (
-	inputFile  string
-	outputDir  string
-	configFile string
-	dryRun     bool
+	inputFile   string
+	outputDir   string
+	configFile  string
+	dryRun      bool
+	addComments bool
 )
 
 var rootCmd = &cobra.Command{
@@ -40,6 +41,7 @@ func Execute() error {
 	rootCmd.Flags().StringVarP(&outputDir, "output-dir", "o", "", "Output directory for split files (default: same as input path)")
 	rootCmd.Flags().StringVarP(&configFile, "config", "c", "", "Configuration file for custom grouping rules")
 	rootCmd.Flags().BoolVarP(&dryRun, "dry-run", "d", false, "Show what would be done without actually creating files")
+	rootCmd.Flags().BoolVar(&addComments, "add-comments", false, "Add descriptive comments to terraform blocks")
 
 	return rootCmd.Execute()
 }
@@ -164,10 +166,11 @@ func run() error {
 
 	// Create usecase request
 	req := &usecase.OrganizeFilesRequest{
-		InputPath:  inputFile,
-		OutputDir:  outputDir,
-		ConfigFile: configFile,
-		DryRun:     dryRun,
+		InputPath:   inputFile,
+		OutputDir:   outputDir,
+		ConfigFile:  configFile,
+		DryRun:      dryRun,
+		AddComments: addComments,
 	}
 
 	// Execute usecase

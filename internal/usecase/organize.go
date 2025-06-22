@@ -15,10 +15,11 @@ import (
 
 // OrganizeFilesRequest は OrganizeFiles ユースケースのリクエスト
 type OrganizeFilesRequest struct {
-	InputPath  string
-	OutputDir  string
-	ConfigFile string
-	DryRun     bool
+	InputPath   string
+	OutputDir   string
+	ConfigFile  string
+	DryRun      bool
+	AddComments bool
 }
 
 // OrganizeFilesResponse は OrganizeFiles ユースケースのレスポンス
@@ -87,7 +88,7 @@ func (uc *OrganizeFilesUsecase) Execute(req *OrganizeFilesRequest) (*OrganizeFil
 	fmt.Printf("Organized into %d file groups\n", len(groups))
 
 	// ファイルの書き出し
-	w := writer.New(outputDir, req.DryRun)
+	w := writer.NewWithComments(outputDir, req.DryRun, req.AddComments)
 	if err := w.WriteGroups(groups); err != nil {
 		return nil, fmt.Errorf("failed to write files: %w", err)
 	}

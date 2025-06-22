@@ -1,6 +1,10 @@
 locals {
-  common_tags  = {}
-  environment  = "production"
-  full_domain  = "${var.subdomain}.${var.domain_name}"
+  environment = "production"
+  common_tags = {
+    Environment = local.environment
+    Project     = "complex-test"
+    ManagedBy   = "terraform"
+  }
   service_name = "${var.subdomain}-service"
+  full_domain  = "${var.subdomain}.${var.domain_name}"
 }

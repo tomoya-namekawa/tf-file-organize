@@ -54,15 +54,15 @@ The codebase follows clean architecture principles with strict layered separatio
 
 1. **Usecase Layer** (`internal/usecase/organize.go`): Business logic orchestrator that coordinates all operations. Implements security validation, configuration loading, and error handling.
 
-2. **Parser** (`internal/parser/terraform.go`): Uses `github.com/hashicorp/hcl/v2` to parse Terraform files into structured data. Supports both single files and recursive directory parsing.
+2. **Parser** (`internal/parser/terraform.go`): Uses `github.com/hashicorp/hcl/v2` to parse Terraform files into structured data. **Key feature**: Extracts raw block content with comments preserved using dual parsing (standard HCL + syntax trees). Supports both single files and recursive directory parsing.
 
 3. **Config** (`internal/config/config.go`): Manages YAML configuration files for custom grouping rules. Supports wildcard pattern matching, resource exclusion, and filename overrides.
 
 4. **Splitter** (`internal/splitter/resource.go`): Groups parsed blocks by type and subtype. **Critical**: Implements deterministic sorting for stable output.
 
-5. **Writer** (`internal/writer/file.go`): Converts grouped blocks back to HCL format using `hclwrite`. **Key feature**: Implements deterministic attribute ordering.
+5. **Writer** (`internal/writer/file.go`): Converts grouped blocks back to HCL format. **Key features**: Comment preservation via raw source code reconstruction, optional descriptive comment generation, and deterministic attribute ordering.
 
-6. **Types** (`pkg/types/terraform.go`): Defines core data structures including Block, ParsedFile, and BlockGroup.
+6. **Types** (`pkg/types/terraform.go`): Defines core data structures including Block (with RawBody for comment preservation), ParsedFile, and BlockGroup.
 
 ### CLI Interface
 
@@ -73,6 +73,7 @@ Built with Cobra framework (`cmd/root.go`). The CLI layer is thin - it only hand
 - `--output-dir/-o`: Output directory (default: same as input path)
 - `--config/-c`: Configuration file path (optional, auto-detects default files)
 - `--dry-run/-d`: Preview mode without file creation
+- `--add-comments`: Add descriptive comments to terraform blocks (disabled by default)
 
 ### Configuration System
 
@@ -101,7 +102,8 @@ testdata/
 ├── integration/         # Golden file test cases
 │   ├── case1/          # Basic blocks (default config)
 │   ├── case2/          # Multiple files (basic grouping)
-│   └── case3/          # Custom grouping rules
+│   ├── case3/          # Custom grouping rules
+│   └── case4/          # Complex multi-cloud setup (25 blocks)
 ├── configs/            # Configuration file examples
 └── tmp/               # Test outputs (gitignored)
 ```
@@ -127,6 +129,7 @@ go tool cover -func=coverage.out
 
 ### Core Requirements
 - **HCL Processing**: Always use `github.com/hashicorp/hcl` for Terraform-related processing
+- **Comment Preservation**: Block-level comments are ALWAYS preserved via RawBody extraction (no configuration needed)
 - **Deterministic Output**: Sort all collections (resources, attributes, filenames) alphabetically
 - **Security First**: Use `filepath.Clean` and `filepath.Base` to prevent path traversal attacks
 - **Golden File Tests**: Mandatory for any output changes
@@ -195,8 +198,65 @@ actionlint
 
 ### Key Implementation Details
 
-**Deterministic Output**: Critical for CI/CD and version control. Both resource ordering (via `sortBlocksInGroup`) and attribute ordering (via alphabetical sorting in `copyBlockBodyGeneric`) are deterministic.
+**Comment Preservation Architecture**: Uses dual parsing approach - standard HCL parsing for structure analysis plus `hclsyntax` parsing for raw content extraction. The `RawBody` field in Block preserves original source including all comments, formatting, and attribute order.
 
-**Testing Architecture**: Uses separate test packages to avoid import cycles. Golden file tests provide regression protection with exact content matching.
+**Deterministic Output**: Critical for CI/CD and version control. Both resource ordering (via `sortBlocksInGroup`) and original content preservation (via RawBody) ensure consistent output.
 
-**HCL Processing**: The writer handles complex Terraform expressions through multiple fallback mechanisms using `hclsyntax.Body` for direct syntax tree access.
+**Testing Architecture**: Uses separate test packages to avoid import cycles. Golden file tests provide regression protection with exact content matching including preserved comments.
+
+**HCL Processing**: The writer prioritizes RawBody content when available (comment preservation), falling back to structured HCL processing for edge cases.
+
+## Comment Preservation System
+
+### How It Works
+The tool ALWAYS preserves block-internal comments by default. This is achieved through:
+
+1. **Dual Parsing**: Both standard HCL and syntax tree parsing to capture structure + raw content
+2. **RawBody Extraction**: Using `OpenBraceRange` and `CloseBraceRange` to extract exact source between `{` and `}`
+3. **Raw Block Reconstruction**: Writer uses `appendRawBlock()` to output original content with comments intact
+
+### What Is Preserved
+- **All block-internal comments**: `# comment` within blocks
+- **Original formatting**: Spacing, indentation, and attribute order
+- **Complex expressions**: Template strings, nested objects, and function calls
+- **Multi-line structures**: Objects, arrays, and nested blocks
+
+### What Is NOT Preserved
+- **File-level comments**: Comments outside of blocks (by design - file organization changes structure)
+- **Block header comments**: Comments above block declarations (optional via `--add-comments`)
+
+### Example
+```hcl
+# Input
+resource "aws_instance" "web" {
+  # AMI configuration
+  ami = "ami-12345"
+  
+  # Network settings  
+  subnet_id = var.subnet_id
+}
+
+# Output (comments preserved exactly)
+resource "aws_instance" "web" {
+  # AMI configuration
+  ami = "ami-12345"
+  
+  # Network settings  
+  subnet_id = var.subnet_id
+}
+```
+
+## Best Practices
+
+### File Management
+- テスト結果などの一時的なファイルはtmp dirに作って
+
+### Golden File Test Updates
+When modifying output behavior, golden files must be updated manually:
+```bash
+# Run tests to see differences
+go test -run TestGoldenFiles -v
+
+# Update golden files with new expected output
+cp tmp/integration-test/case*/* testdata/integration/case*/expected/
+```
