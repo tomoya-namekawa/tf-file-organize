@@ -64,6 +64,8 @@ The codebase follows clean architecture principles with strict layered separatio
 
 6. **Types** (`pkg/types/terraform.go`): Defines core data structures including Block (with RawBody for comment preservation), ParsedFile, and BlockGroup.
 
+7. **Version** (`internal/version/version.go`): Manages version information with fallback support for different build methods. Uses `runtime/debug.BuildInfo` for `go install` compatibility while maintaining GoReleaser ldflags injection priority.
+
 ### CLI Interface
 
 Built with Cobra framework (`cmd/root.go`). The CLI layer is thin - it only handles argument parsing and delegates business logic to the usecase layer.
@@ -174,6 +176,7 @@ go = "latest"
 golangci-lint = "v2.1.6"
 actionlint = "latest"
 pinact = "latest"
+"npm:@goreleaser/goreleaser" = "latest"
 ```
 
 ## Release Process
@@ -214,11 +217,11 @@ make release-check
 After release, users can install via:
 
 ```bash
-# Go install (latest)
-go install github.com/tomoya-namekawa/terraform-file-organize@latest
+# Go install (latest) - may require GOPRIVATE setting
+GOPRIVATE=github.com/tomoya-namekawa/terraform-file-organize go install github.com/tomoya-namekawa/terraform-file-organize@latest
 
 # Go install (specific version)
-go install github.com/tomoya-namekawa/terraform-file-organize@v1.0.0
+GOPRIVATE=github.com/tomoya-namekawa/terraform-file-organize go install github.com/tomoya-namekawa/terraform-file-organize@v0.1.1
 
 # Download binary directly from GitHub releases
 ```
@@ -253,6 +256,12 @@ actionlint
 **Testing Architecture**: Uses separate test packages to avoid import cycles. Golden file tests provide regression protection with exact content matching including preserved comments.
 
 **HCL Processing**: The writer prioritizes RawBody content when available (comment preservation), falling back to structured HCL processing for edge cases.
+
+**Version Detection System**: Multi-tier version detection system that works across different build environments:
+1. GoReleaser builds use ldflags-injected version information
+2. `go install @version` builds use module version from BuildInfo
+3. Development builds use VCS revision with dirty state detection
+This ensures consistent version reporting regardless of installation method.
 
 ## Comment Preservation System
 

@@ -116,11 +116,6 @@ func (w *Writer) writeGroup(group *types.BlockGroup) error {
 
 // getBlockComment はブロックに適切なコメントを返す
 func (w *Writer) getBlockComment(block *types.Block) string {
-	// 保存されたコメントがある場合はそれを使用
-	if block.LeadComment != "" {
-		return block.LeadComment
-	}
-
 	return w.getDefaultComment(block)
 }
 

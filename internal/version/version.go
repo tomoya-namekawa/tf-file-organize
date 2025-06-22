@@ -6,12 +6,24 @@ import (
 	"runtime/debug"
 )
 
+const (
+	// VCS設定キー
+	vcsRevisionKey = "vcs.revision"
+	vcsModifiedKey = "vcs.modified"
+	vcsTimeKey     = "vcs.time"
+
+	// デフォルト値
+	unknownValue = "unknown"
+	devVersion   = "dev"
+	develVersion = "(devel)"
+)
+
 var (
 	// これらの変数はビルド時にldflags経由で設定される
-	Version   = "dev"     // バージョン番号
-	GitCommit = "unknown" // Gitコミットハッシュ
-	GitTag    = ""        // Gitタグ
-	BuildDate = "unknown" // ビルド日時
+	Version   = devVersion   // バージョン番号
+	GitCommit = unknownValue // Gitコミットハッシュ
+	GitTag    = ""           // Gitタグ
+	BuildDate = unknownValue // ビルド日時
 	GoVersion = runtime.Version()
 )
 
@@ -21,28 +33,28 @@ func GetVersion() string {
 	if GitTag != "" {
 		return GitTag
 	}
-	if Version != "dev" {
+	if Version != devVersion {
 		return Version
 	}
-	
+
 	// go installの場合はdebug.BuildInfoから取得
 	if info, ok := debug.ReadBuildInfo(); ok {
 		// モジュールバージョンを確認
-		if info.Main.Version != "" && info.Main.Version != "(devel)" {
+		if info.Main.Version != "" && info.Main.Version != develVersion {
 			return info.Main.Version
 		}
-		
+
 		// VCS情報からバージョンを構築
 		var revision, modified string
 		for _, setting := range info.Settings {
 			switch setting.Key {
-			case "vcs.revision":
+			case vcsRevisionKey:
 				revision = setting.Value
-			case "vcs.modified":
+			case vcsModifiedKey:
 				modified = setting.Value
 			}
 		}
-		
+
 		if revision != "" {
 			version := revision
 			if len(revision) > 7 {
@@ -54,21 +66,21 @@ func GetVersion() string {
 			return version
 		}
 	}
-	
+
 	return Version
 }
 
 // GetBuildInfo は詳細なビルド情報を返す
 func GetBuildInfo() string {
 	version := GetVersion()
-	
+
 	// ldflags経由のコミット情報を優先
-	if GitCommit != "unknown" && len(GitCommit) > 7 {
+	if GitCommit != unknownValue && len(GitCommit) > 7 {
 		version += fmt.Sprintf(" (commit: %s)", GitCommit[:7])
 	} else if info, ok := debug.ReadBuildInfo(); ok {
 		// VCS情報からコミット情報を取得
 		for _, setting := range info.Settings {
-			if setting.Key == "vcs.revision" && len(setting.Value) > 7 {
+			if setting.Key == vcsRevisionKey && len(setting.Value) > 7 {
 				version += fmt.Sprintf(" (commit: %s)", setting.Value[:7])
 				break
 			}
@@ -76,10 +88,10 @@ func GetBuildInfo() string {
 	}
 
 	buildDate := BuildDate
-	if buildDate == "unknown" {
+	if buildDate == unknownValue {
 		if info, ok := debug.ReadBuildInfo(); ok {
 			for _, setting := range info.Settings {
-				if setting.Key == "vcs.time" {
+				if setting.Key == vcsTimeKey {
 					buildDate = setting.Value
 					break
 				}
