@@ -25,9 +25,10 @@ mise list
 go build -o terraform-file-organize
 
 # Basic usage examples
-./terraform-file-organize main.tf --dry-run
-./terraform-file-organize . --output-dir tmp/test --dry-run
-./terraform-file-organize testdata/terraform --config testdata/configs/terraform-file-organize.yaml
+./terraform-file-organize plan main.tf
+./terraform-file-organize run . --output-dir tmp/test
+./terraform-file-organize run testdata/terraform --config testdata/configs/terraform-file-organize.yaml
+./terraform-file-organize validate-config testdata/configs/terraform-file-organize.yaml
 ```
 
 ### Essential Development Commands
@@ -40,7 +41,7 @@ go tool cover -func=coverage.out
 
 # Critical regression tests
 go test -run TestGoldenFiles -v
-go build && ./terraform-file-organize testdata/terraform/sample.tf --dry-run
+go build && ./terraform-file-organize plan testdata/terraform/sample.tf
 
 # Workflow validation
 actionlint
@@ -52,30 +53,45 @@ The codebase follows clean architecture principles with strict layered separatio
 
 ### Core Components
 
-1. **Usecase Layer** (`internal/usecase/usecase.go`): Business logic orchestrator that coordinates all operations. Implements security validation, configuration loading, and error handling with dependency injection support for testing.
+1. **Usecase Layer** (`internal/usecase/usecase.go`): Business logic orchestrator with recent refactoring for improved maintainability. The main `Execute` function is now split into focused sub-functions:
+   - `prepareExecution()`: Input validation and setup 
+   - `processBlocks()`: File parsing and block grouping
+   - `handleOutput()`: File writing operations
+   - `handleSourceFileCleanup()`: Backup and source file management
+   - `displayResults()`: User feedback and result formatting
 
-2. **Parser** (`internal/parser/parser.go`): Uses `github.com/hashicorp/hcl/v2` to parse Terraform files into structured data. **Key feature**: Extracts raw block content with comments preserved using dual parsing (standard HCL + syntax trees). Supports both single files and recursive directory parsing.
+2. **Validation Layer** (`internal/validation/validation.go`): **New package** created to eliminate code duplication across CLI commands. Provides centralized path validation, security checks, and flag combination validation used by all cmd/ files.
 
-3. **Config** (`internal/config/config.go`): Manages YAML configuration files for custom grouping rules. Supports wildcard pattern matching, resource exclusion, and filename overrides.
+3. **Parser** (`internal/parser/parser.go`): Uses `github.com/hashicorp/hcl/v2` to parse Terraform files into structured data. **Key feature**: Extracts raw block content with comments preserved using dual parsing (standard HCL + syntax trees).
 
-4. **Splitter** (`internal/splitter/splitter.go`): Groups parsed blocks by type and subtype. **Critical**: Implements deterministic sorting for stable output.
+4. **Config** (`internal/config/config.go`): Manages YAML configuration files for custom grouping rules. Supports complex pattern matching including sub-type patterns and file exclusion.
 
-5. **Writer** (`internal/writer/writer.go`): Converts grouped blocks back to HCL format. **Key features**: Comment preservation via raw source code reconstruction, optional descriptive comment generation, and deterministic attribute ordering.
+5. **Splitter** (`internal/splitter/splitter.go`): Groups parsed blocks by type and subtype with deterministic sorting for stable output. Recent refactoring split `sanitizeFileName` into focused functions:
+   - `cleanUnsafeCharacters()`: Security-focused character cleaning
+   - `applyLengthLimits()`: File length restrictions
+   - `validateReservedNames()`: Windows reserved name handling
 
-6. **Types** (`pkg/types/types.go`): Defines core data structures including Block (with RawBody and LeadingComments for comment preservation), ParsedFile, and BlockGroup.
+6. **Writer** (`internal/writer/writer.go`): Converts grouped blocks back to HCL format. Prioritizes RawBody content for comment preservation, falling back to structured HCL processing.
 
-7. **Version** (`internal/version/version.go`): Manages version information with fallback support for different build methods. Uses `runtime/debug.BuildInfo` for `go install` compatibility while maintaining GoReleaser ldflags injection priority.
+7. **Types** (`pkg/types/types.go`): Defines core data structures including Block (with RawBody for comment preservation), ParsedFile, and BlockGroup.
 
 ### CLI Interface
 
-Built with Cobra framework (`cmd/root.go`). The CLI layer is thin - it only handles argument parsing and delegates business logic to the usecase layer.
+Built with Cobra framework using subcommand architecture (`cmd/`). Recent refactoring eliminated code duplication:
 
-**Arguments:**
-- Positional argument: Input path (file or directory, required)
-- `--output-dir/-o`: Output directory (default: same as input path)
-- `--config/-c`: Configuration file path (optional, auto-detects default files)
-- `--dry-run/-d`: Preview mode without file creation
-- `--add-comments`: Add descriptive comments to terraform blocks (disabled by default)
+- **Common Logic** (`cmd/common.go`): Shared `executeOrganizeFiles()` function used by both run and plan commands
+- **Command Separation**: Each subcommand has focused responsibility without duplicated validation logic
+
+**Subcommands:**
+- `run <input-path>`: Execute file organization with actual file creation/modification
+  - `--output-dir/-o`: Output directory (default: same as input path)
+  - `--config/-c`: Configuration file path (optional, auto-detects default files)
+  - `--recursive/-r`: Process directories recursively
+  - `--backup`: Backup original files to 'backup' subdirectory before organizing
+- `plan <input-path>`: Preview mode showing what would be done without file creation
+  - Same options as run (except `--backup` not applicable)
+- `validate-config <config-file>`: Validate configuration file syntax and content
+- `version`: Show version information
 
 ### Configuration System
 
@@ -86,16 +102,18 @@ Auto-searches for configuration files in this order:
 4. `.terraform-file-organize.yml`
 
 **Configuration features:**
-- **Groups**: Custom file grouping with wildcard patterns (e.g., `aws_s3_*` → `storage.tf`)
-- **Overrides**: Custom filenames for block types (e.g., `variable` → `vars.tf`)
-- **Exclude**: Patterns to keep as individual files
+- **Groups**: Custom file grouping with complex pattern matching:
+  - Simple patterns: `aws_s3_*` → `storage.tf`
+  - Sub-type patterns: `resource.aws_instance.web*` → `web-infrastructure.tf`
+  - Block-type patterns: `variable`, `output.debug_*` → custom files
+- **ExcludeFiles**: File name patterns to exclude from grouping (e.g., `*special*.tf`, `debug-*.tf`)
 
 ## Testing Strategy
 
 ### Test Structure
-- **Unit Tests**: All `internal/` packages have `*_test.go` files using separate test packages for isolation. Business logic tests in `business_test.go` use dependency injection with mocks.
+- **Unit Tests**: All `internal/` packages have `*_test.go` files using separate test packages for isolation
 - **CLI Tests** (`cli_test.go`): Command-line interface functionality testing via binary execution
-- **Golden File Tests** (`golden_test.go`): **Critical** - End-to-end testing with CLI binary comparing actual output against expected files in `testdata/integration/`
+- **Golden File Tests** (`golden_test.go`): **Critical** - End-to-end testing comparing actual output against expected files
 
 ### Test Data Organization
 ```
@@ -116,7 +134,7 @@ testdata/
 # Regression detection (most important)
 go test -run TestGoldenFiles -v
 
-# CLI interface testing
+# CLI interface testing (includes all subcommands)
 go test -run TestCLI -v
 
 # Package-specific tests
@@ -125,9 +143,10 @@ go test ./internal/parser -v
 go test ./internal/splitter -v
 go test ./internal/writer -v
 go test ./internal/usecase -v
+go test ./internal/validation -v  # New validation package
 
-# Business logic testing with mocks
-go test ./internal/usecase -run TestOrganizeFilesUsecase_ExecuteBusinessLogic -v
+# Single test execution
+go test -run TestSpecificFunction -v ./internal/packagename
 
 # Coverage target: >60%
 go test -v -coverprofile=coverage.out ./...
@@ -138,98 +157,64 @@ go tool cover -func=coverage.out
 
 ### Core Requirements
 - **HCL Processing**: Always use `github.com/hashicorp/hcl` for Terraform-related processing
-- **Comment Preservation**: Block-level comments are ALWAYS preserved via RawBody extraction (no configuration needed)
+- **Comment Preservation**: Block-level comments are ALWAYS preserved via RawBody extraction
 - **Deterministic Output**: Sort all collections (resources, attributes, filenames) alphabetically
 - **Security First**: Use `filepath.Clean` and `filepath.Base` to prevent path traversal attacks
 - **Golden File Tests**: Mandatory for any output changes
+- **Idempotency**: Multiple runs produce consistent results by default source file removal
 
 ### Code Standards
 - Use constants for repeated strings (enforced by goconst linter)
 - Terraform block types defined as constants in `internal/splitter/splitter.go`
 - Modern Go patterns: `slices.Contains()` instead of loops
 - Named return values for complex functions
+- **Function Length**: Keep functions under 50 lines; split complex functions into focused sub-functions
+- **Single Responsibility**: Each function should have one clear purpose (recently enforced through refactoring)
+- **Error Handling**: All defer statements in tests must handle errors appropriately (`_ = os.Remove()` pattern)
 
 ### Critical Files for Output Changes
 When modifying output behavior, update these files:
-- `internal/splitter/splitter.go` - Resource sorting and grouping
+- `internal/splitter/splitter.go` - Resource sorting, grouping, and complex pattern matching
 - `internal/writer/writer.go` - Attribute ordering and HCL formatting
+- `internal/config/config.go` - Configuration structure and validation
+- `internal/validation/validation.go` - Path validation and security checks
 - `testdata/integration/case*/expected/` - Golden file test expectations
+- `cmd/*.go` - CLI subcommand definitions and flag handling
 
-## CI/CD Configuration
+### Maintenance and Refactoring Guidelines
+When improving code maintainability:
+1. **Eliminate Duplication**: Use `internal/validation` package for shared validation logic
+2. **Split Large Functions**: Break functions >50 lines into focused sub-functions
+3. **Security First**: All file operations must use validation package functions
+4. **Test Coverage**: Maintain >60% coverage, especially for new validation package (currently 80.8%)
 
-### GitHub Actions Pipelines
+## Key Implementation Details
 
-**Main CI Pipeline** (`.github/workflows/ci.yml`):
-- **test**: Comprehensive test suite with race detection and coverage
-- **lint**: golangci-lint with security-focused rules (gosec, govet, gocritic, etc.)
-- **build**: Binary build and sample input verification
+### Comment Preservation Architecture
+Uses dual parsing approach - standard HCL parsing for structure analysis plus `hclsyntax` parsing for raw content extraction. The `RawBody` field in Block preserves original source including all comments, formatting, and attribute order.
 
-**Workflow Lint Pipeline** (`.github/workflows/workflow-lint.yml`):
-- **workflow-lint**: actionlint for GitHub Actions
-- **pinact-check**: Verifies all actions are pinned to commit hashes
-- Triggered by changes to `.github/**` or `.mise.toml`
+### Idempotency and File Management
+The tool ensures idempotent operations by:
+1. **Default Behavior**: Source files are removed after successful organization to prevent duplication
+2. **Backup Option**: `--backup` flag moves source files to 'backup' subdirectory instead of deletion
+3. **Smart Conflict Resolution**: Config-aware file removal prevents conflicts when grouped files would duplicate source content
+4. **Source File Tracking**: Maintains list of original files for proper cleanup
 
-### Security Features
-- All GitHub Actions pinned to commit SHA hashes
-- gosec security scanning integrated into CI
-- renovatebot for dependency management
-- Path traversal protection in usecase layer
+### Pattern Matching System
+Supports complex pattern matching including:
+- Wildcard patterns: `aws_s3_*`, `*special*`
+- Sub-type patterns: `resource.aws_instance.web*`
+- Block-type patterns: `variable`, `output.debug_*`
+- Multiple `*` wildcards in single pattern
 
-### Tool Versions (mise-managed)
-```toml
-[tools]
-go = "latest"
-golangci-lint = "v2.1.6"
-actionlint = "latest"
-pinact = "latest"
-"npm:@goreleaser/goreleaser" = "latest"
-```
-
-## Release Process
-
-### Automated Release with Release Please
-
-The project uses Release Please for automated version management and GoReleaser for building:
-
-1. **Conventional Commits**: Use conventional commit format for automatic versioning
-   ```bash
-   git commit -m "feat: add new feature"
-   git commit -m "fix: fix critical bug"
-   git commit -m "docs: update documentation"
-   ```
-
-2. **Automatic Process**: 
-   - Release Please creates PR with version bump and changelog
-   - Merging the PR triggers automatic release and GoReleaser build
-   - Binaries are published to GitHub releases
-
-3. **Configuration Files**:
-   - `.release-please-manifest.json`: Version tracking
-   - `release-please-config.json`: Release Please configuration
-   - `.goreleaser.yaml`: GoReleaser build configuration
-
-### Manual Release Testing
-
+### Golden File Test Updates
+When modifying output behavior, golden files must be updated manually:
 ```bash
-# Test release build locally
-make release-snapshot
+# Run tests to see differences
+go test -run TestGoldenFiles -v
 
-# Check GoReleaser configuration
-make release-check
-```
-
-### Installation Methods
-
-After release, users can install via:
-
-```bash
-# Go install (latest) - may require GOPRIVATE setting
-GOPRIVATE=github.com/tomoya-namekawa/terraform-file-organize go install github.com/tomoya-namekawa/terraform-file-organize@latest
-
-# Go install (specific version)
-GOPRIVATE=github.com/tomoya-namekawa/terraform-file-organize go install github.com/tomoya-namekawa/terraform-file-organize@v0.1.1
-
-# Download binary directly from GitHub releases
+# Update golden files with new expected output
+cp tmp/integration-test/case*/* testdata/integration/case*/expected/
 ```
 
 ## Development Workflow
@@ -247,102 +232,52 @@ go test -run TestGoldenFiles -v
 
 # 4. Build and integration test
 go build -o terraform-file-organize
-./terraform-file-organize testdata/terraform/sample.tf --dry-run
+./terraform-file-organize plan testdata/terraform/sample.tf
 
 # 5. Workflow validation
 actionlint
 ```
 
-### Key Implementation Details
+## CI/CD Configuration
 
-**Comment Preservation Architecture**: Uses dual parsing approach - standard HCL parsing for structure analysis plus `hclsyntax` parsing for raw content extraction. The `RawBody` field in Block preserves original source including all comments, formatting, and attribute order.
+### GitHub Actions Pipelines
+- **Main CI Pipeline** (`.github/workflows/ci.yml`): test, lint, build with security scanning
+- **Workflow Lint Pipeline** (`.github/workflows/workflow-lint.yml`): actionlint and pinact checks
 
-**Deterministic Output**: Critical for CI/CD and version control. Both resource ordering (via `sortBlocksInGroup`) and original content preservation (via RawBody) ensure consistent output.
+### Security Features
+- All GitHub Actions pinned to commit SHA hashes
+- gosec security scanning integrated into CI
+- Path traversal protection in usecase layer
 
-**Testing Architecture**: Uses separate test packages to avoid import cycles. Golden file tests provide regression protection with exact content matching including preserved comments.
+### Tool Versions (mise-managed)
+```toml
+[tools]
+go = "latest"
+golangci-lint = "v2.1.6"
+actionlint = "latest"
+pinact = "latest"
+"npm:@goreleaser/goreleaser" = "latest"
+terraform = "latest"
 
-**HCL Processing**: The writer prioritizes RawBody content when available (comment preservation), falling back to structured HCL processing for edge cases.
-
-**Version Detection System**: Multi-tier version detection system that works across different build environments:
-1. GoReleaser builds use ldflags-injected version information
-2. `go install @version` builds use module version from BuildInfo
-3. Development builds use VCS revision with dirty state detection
-This ensures consistent version reporting regardless of installation method.
-
-## Comment Preservation System
-
-### How It Works
-The tool ALWAYS preserves block-internal comments by default. This is achieved through:
-
-1. **Dual Parsing**: Both standard HCL and syntax tree parsing to capture structure + raw content
-2. **RawBody Extraction**: Using `OpenBraceRange` and `CloseBraceRange` to extract exact source between `{` and `}`
-3. **Raw Block Reconstruction**: Writer uses `appendRawBlock()` to output original content with comments intact
-
-### What Is Preserved
-- **All block-internal comments**: `# comment` within blocks
-- **Block-preceding comments**: Comments immediately before blocks (via LeadingComments field)
-- **Original formatting**: Spacing, indentation, and attribute order
-- **Complex expressions**: Template strings, nested objects, and function calls
-- **Multi-line structures**: Objects, arrays, and nested blocks
-
-### What Is NOT Preserved
-- **File-level comments**: Comments outside of blocks (by design - file organization changes structure)
-- **Block header comments**: Comments above block declarations become leading comments in organized files
-
-### Example
-```hcl
-# Input
-resource "aws_instance" "web" {
-  # AMI configuration
-  ami = "ami-12345"
-  
-  # Network settings  
-  subnet_id = var.subnet_id
-}
-
-# Output (comments preserved exactly)
-resource "aws_instance" "web" {
-  # AMI configuration
-  ami = "ami-12345"
-  
-  # Network settings  
-  subnet_id = var.subnet_id
-}
+[env]
+GOPROXY = "https://proxy.golang.org,direct"
+GOSUMDB = "sum.golang.org"
 ```
 
-## Key Differences from Other Documentation
+## Release Process
 
-- **README.md**: User-focused documentation in Japanese with installation instructions and basic usage examples
-- **DEVELOPMENT.md**: Comprehensive developer documentation in Japanese including detailed development workflow with Conventional Commits and release-please process
-- **CLAUDE.md**: Technical reference for Claude Code with Go-standard architecture details and critical implementation information
+### Automated Release with Release Please
+The project uses Release Please for automated version management and GoReleaser for building:
 
-## File Naming and Structure Conventions
+1. **Conventional Commits**: Use conventional commit format for automatic versioning
+2. **Automatic Process**: Release Please creates PR with version bump, merging triggers release
+3. **Configuration Files**: `.release-please-manifest.json`, `release-please-config.json`, `.goreleaser.yaml`
 
-### Go Standard Compliance
-This project follows Go standard naming conventions:
-
-- **Package names provide context**: Files within packages use simple names (e.g., `parser.go` not `hcl_parser.go`)
-- **Test separation**: Business logic tests (`business_test.go`), CLI tests (`cli_test.go`), golden file tests (`golden_test.go`)
-- **Clean architecture**: `internal/` for private implementation, `pkg/` for public APIs, `cmd/` for command definitions
-
-### Test Organization
-- **Unit tests**: Mock-based, fast, no I/O operations
-- **Integration tests**: CLI binary execution with real file operations  
-- **Golden file tests**: End-to-end regression testing with exact output comparison
-
-### Critical Test Case Details
-
-**case5**: Specifically tests the fallback processing when RawBody is unavailable. This case validates:
-- Complex template expressions like `"${var.subdomain}.${var.domain_name}"`
-- Nested block preservation (`metadata`, `spec`) without RawBody
-- Syntax body handling for unknown block types
-
-### Golden File Test Updates
-When modifying output behavior, golden files must be updated manually:
+### Manual Release Testing
 ```bash
-# Run tests to see differences
-go test -run TestGoldenFiles -v
+# Test release build locally
+make release-snapshot
 
-# Update golden files with new expected output
-cp tmp/integration-test/case*/* testdata/integration/case*/expected/
+# Check GoReleaser configuration
+make release-check
 ```

@@ -22,6 +22,13 @@ const (
 	blockTypeOutput    = "output"
 	blockTypeLocals    = "locals"
 	blockTypeTerraform = "terraform"
+
+	// Default file names
+	defaultResourceFile  = "resource.tf"
+	defaultDataFile      = "data.tf"
+	defaultModuleFile    = "module.tf"
+	defaultOutputsFile   = "outputs.tf"
+	defaultVariablesFile = "variables.tf"
 )
 
 // Splitter groups Terraform blocks according to configuration rules.
@@ -80,26 +87,22 @@ func (s *Splitter) GroupBlocks(parsedFile *types.ParsedFile) []*types.BlockGroup
 func (s *Splitter) getGroupKeyAndFilename(block *types.Block) (groupKey, filename string) {
 	resourceType := s.getSubType(block)
 
-	// 設定ファイルでの除外チェック
-	if s.config != nil && resourceType != "" && s.config.IsExcluded(resourceType) {
-		// 除外対象は個別ファイルにする
-		key := s.getDefaultGroupKey(block)
-		fname := s.getDefaultFileName(block)
-		return key, fname
-	}
+	// パターンマッチング用の候補文字列を作成
+	candidates := s.getMatchCandidates(block, resourceType)
 
 	// 設定ファイルでのグループ化チェック
-	if s.config != nil && resourceType != "" {
-		if group := s.config.FindGroupForResource(resourceType); group != nil {
-			return group.Name, group.Filename
-		}
-	}
-
-	// オーバーライド設定のチェック
 	if s.config != nil {
-		if overrideFilename := s.config.GetOverrideFilename(block.Type); overrideFilename != "" {
-			key := s.getDefaultGroupKey(block)
-			return key, overrideFilename
+		for _, candidate := range candidates {
+			if group := s.config.FindGroupForResource(candidate); group != nil {
+				// ファイル除外チェック
+				if s.config.IsFileExcluded(group.Filename) {
+					// 除外対象は個別ファイルにする
+					key := s.getDefaultGroupKey(block)
+					fname := s.getExcludedFileName(block)
+					return key, fname
+				}
+				return group.Name, group.Filename
+			}
 		}
 	}
 
@@ -107,6 +110,76 @@ func (s *Splitter) getGroupKeyAndFilename(block *types.Block) (groupKey, filenam
 	groupKey = s.getDefaultGroupKey(block)
 	filename = s.getDefaultFileName(block)
 	return
+}
+
+// getMatchCandidates はブロックに対するマッチング候補を生成
+// 優先度順に以下のパターンを生成：
+// 1. block_type.sub_type.name (例: output.instance_ip.web)
+// 2. block_type.sub_type (例: resource.aws_instance)
+// 3. sub_type (例: aws_instance)
+// 4. block_type (例: resource)
+func (s *Splitter) getMatchCandidates(block *types.Block, resourceType string) []string {
+	var candidates []string
+
+	// ブロック名（第2ラベル）を取得
+	var blockName string
+	if len(block.Labels) > 1 {
+		blockName = block.Labels[1]
+	}
+
+	// 1. block_type.sub_type.name パターン
+	if resourceType != "" && blockName != "" {
+		candidates = append(candidates, fmt.Sprintf("%s.%s.%s", block.Type, resourceType, blockName))
+	}
+
+	// 2. block_type.sub_type パターン
+	if resourceType != "" {
+		candidates = append(candidates, fmt.Sprintf("%s.%s", block.Type, resourceType))
+	}
+
+	// 3. sub_type パターン
+	if resourceType != "" {
+		candidates = append(candidates, resourceType)
+	}
+
+	// 4. block_type パターン
+	candidates = append(candidates, block.Type)
+
+	return candidates
+}
+
+// getExcludedFileName は除外されたブロックの個別ファイル名を生成
+func (s *Splitter) getExcludedFileName(block *types.Block) string {
+	switch block.Type {
+	case blockTypeResource:
+		if len(block.Labels) > 0 {
+			return fmt.Sprintf("resource__%s.tf", s.sanitizeFileName(block.Labels[0]))
+		}
+		return defaultResourceFile
+	case blockTypeData:
+		if len(block.Labels) > 0 {
+			return fmt.Sprintf("data__%s.tf", s.sanitizeFileName(block.Labels[0]))
+		}
+		return defaultDataFile
+	case blockTypeModule:
+		if len(block.Labels) > 0 {
+			return fmt.Sprintf("module__%s.tf", s.sanitizeFileName(block.Labels[0]))
+		}
+		return defaultModuleFile
+	case blockTypeOutput:
+		if len(block.Labels) > 0 {
+			return fmt.Sprintf("output__%s.tf", s.sanitizeFileName(block.Labels[0]))
+		}
+		return defaultOutputsFile
+	case blockTypeVariable:
+		if len(block.Labels) > 0 {
+			return fmt.Sprintf("variable__%s.tf", s.sanitizeFileName(block.Labels[0]))
+		}
+		return defaultVariablesFile
+	default:
+		// その他のブロックタイプはデフォルトファイル名
+		return s.getDefaultFileName(block)
+	}
 }
 
 func (s *Splitter) getDefaultGroupKey(block *types.Block) string {
@@ -151,6 +224,11 @@ func (s *Splitter) getSubType(block *types.Block) string {
 		if len(block.Labels) > 0 {
 			return block.Labels[0]
 		}
+	case blockTypeOutput, blockTypeVariable:
+		// outputやvariableブロックの場合、第1ラベルがname
+		if len(block.Labels) > 0 {
+			return block.Labels[0]
+		}
 	}
 	return ""
 }
@@ -161,23 +239,23 @@ func (s *Splitter) getDefaultFileName(block *types.Block) string {
 		if len(block.Labels) > 0 {
 			return fmt.Sprintf("resource__%s.tf", s.sanitizeFileName(block.Labels[0]))
 		}
-		return "resource.tf"
+		return defaultResourceFile
 	case blockTypeData:
 		if len(block.Labels) > 0 {
 			return fmt.Sprintf("data__%s.tf", s.sanitizeFileName(block.Labels[0]))
 		}
-		return "data.tf"
+		return defaultDataFile
 	case blockTypeModule:
 		if len(block.Labels) > 0 {
 			return fmt.Sprintf("module__%s.tf", s.sanitizeFileName(block.Labels[0]))
 		}
-		return "module.tf"
+		return defaultModuleFile
 	case blockTypeProvider:
 		return "providers.tf"
 	case blockTypeVariable:
-		return "variables.tf"
+		return defaultVariablesFile
 	case blockTypeOutput:
-		return "outputs.tf"
+		return defaultOutputsFile
 	case blockTypeLocals:
 		return "locals.tf"
 	case blockTypeTerraform:
@@ -194,6 +272,20 @@ func (s *Splitter) sanitizeFileName(name string) string {
 		return unnamedFile
 	}
 
+	// セキュリティクリーニング
+	cleaned := s.cleanUnsafeCharacters(name)
+
+	// 長さ制限とフォーマット正規化
+	cleaned = s.applyLengthLimits(cleaned)
+
+	// Windows予約名検証
+	cleaned = s.validateReservedNames(cleaned)
+
+	return cleaned
+}
+
+// cleanUnsafeCharacters removes dangerous characters and path traversal elements
+func (s *Splitter) cleanUnsafeCharacters(name string) string {
 	// filepath.Cleanを使用してパストラバーサルを防ぐ
 	cleaned := filepath.Clean(name)
 
@@ -234,6 +326,11 @@ func (s *Splitter) sanitizeFileName(name string) string {
 	// 先頭・末尾のアンダースコアを除去
 	cleaned = strings.Trim(cleaned, "_")
 
+	return cleaned
+}
+
+// applyLengthLimits applies length restrictions and handles empty results
+func (s *Splitter) applyLengthLimits(cleaned string) string {
 	// 長さ制限（Windows互換性のため）
 	const maxLength = 200 // .tfを考慮して200文字
 	if len(cleaned) > maxLength {
@@ -246,6 +343,11 @@ func (s *Splitter) sanitizeFileName(name string) string {
 		cleaned = "unnamed"
 	}
 
+	return cleaned
+}
+
+// validateReservedNames checks and handles Windows reserved names
+func (s *Splitter) validateReservedNames(cleaned string) string {
 	// Windowsの予約名チェック
 	reservedNames := map[string]bool{
 		"CON": true, "PRN": true, "AUX": true, "NUL": true,

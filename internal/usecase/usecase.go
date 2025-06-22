@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"slices"
 	"strings"
 
 	"github.com/tomoya-namekawa/terraform-file-organize/internal/config"
@@ -12,6 +11,15 @@ import (
 	"github.com/tomoya-namekawa/terraform-file-organize/internal/splitter"
 	"github.com/tomoya-namekawa/terraform-file-organize/internal/writer"
 	"github.com/tomoya-namekawa/terraform-file-organize/pkg/types"
+)
+
+// Default Terraform file names
+const (
+	localsFile    = "locals.tf"
+	outputsFile   = "outputs.tf"
+	providersFile = "providers.tf"
+	terraformFile = "terraform.tf"
+	variablesFile = "variables.tf"
 )
 
 // ParserInterface はParserの抽象化
@@ -110,9 +118,71 @@ func (d *DefaultConfigLoader) LoadConfig(configPath string) (*config.Config, err
 }
 
 // Execute performs the main business logic for organizing Terraform files.
-//
-//nolint:gocyclo // Complex business logic with multiple validation steps
 func (uc *OrganizeFilesUsecase) Execute(req *OrganizeFilesRequest) (*OrganizeFilesResponse, error) {
+	// 前処理: 入力検証と設定準備
+	preparationResult, err := uc.prepareExecution(req)
+	if err != nil {
+		return nil, err
+	}
+
+	// ファイル解析とブロック処理
+	processingResult, err := uc.processBlocks(req, preparationResult)
+	if err != nil {
+		return nil, err
+	}
+
+	// ブロックが見つからない場合の早期終了
+	if len(processingResult.allBlocks) == 0 {
+		fmt.Println("No Terraform blocks found to organize")
+		return &OrganizeFilesResponse{
+			ProcessedFiles: processingResult.fileCount,
+			TotalBlocks:    0,
+			FileGroups:     0,
+			OutputDir:      preparationResult.outputDir,
+			WasDryRun:      req.DryRun,
+		}, nil
+	}
+
+	// ファイル出力処理
+	if err := uc.handleOutput(req, preparationResult, processingResult); err != nil {
+		return nil, err
+	}
+
+	// ソースファイル処理とクリーンアップ
+	if err := uc.handleSourceFileCleanup(req, preparationResult, processingResult); err != nil {
+		return nil, err
+	}
+
+	// 結果表示とレスポンス作成
+	uc.displayResults(req, preparationResult, processingResult)
+
+	return &OrganizeFilesResponse{
+		ProcessedFiles: processingResult.fileCount,
+		TotalBlocks:    len(processingResult.allBlocks),
+		FileGroups:     len(processingResult.groups),
+		OutputDir:      preparationResult.outputDir,
+		WasDryRun:      req.DryRun,
+	}, nil
+}
+
+// preparationResult holds the result of request preparation
+type preparationResult struct {
+	stat      os.FileInfo
+	outputDir string
+	cfg       *config.Config
+}
+
+// processingResult holds the result of block processing
+type processingResult struct {
+	allBlocks     []*types.Block
+	fileCount     int
+	sourceFiles   []string
+	groups        []*types.BlockGroup
+	filesToRemove []string
+}
+
+// prepareExecution validates and prepares the execution environment
+func (uc *OrganizeFilesUsecase) prepareExecution(req *OrganizeFilesRequest) (*preparationResult, error) {
 	// 入力パスの情報を取得
 	stat, err := os.Stat(req.InputPath)
 	if err != nil {
@@ -135,102 +205,129 @@ func (uc *OrganizeFilesUsecase) Execute(req *OrganizeFilesRequest) (*OrganizeFil
 		return nil, fmt.Errorf("failed to load config: %w", err)
 	}
 
+	return &preparationResult{
+		stat:      stat,
+		outputDir: outputDir,
+		cfg:       cfg,
+	}, nil
+}
+
+// processBlocks parses input files and groups blocks
+func (uc *OrganizeFilesUsecase) processBlocks(req *OrganizeFilesRequest, prep *preparationResult) (*processingResult, error) {
 	// ファイルの解析
-	allBlocks, fileCount, sourceFiles, err := uc.parseInput(req.InputPath, stat, req.Recursive)
+	allBlocks, fileCount, sourceFiles, err := uc.parseInput(req.InputPath, prep.stat, req.Recursive)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse input: %w", err)
 	}
 
+	// ブロックが見つからない場合は早期終了
 	if len(allBlocks) == 0 {
-		fmt.Println("No Terraform blocks found to organize")
-		return &OrganizeFilesResponse{
-			ProcessedFiles: fileCount,
-			TotalBlocks:    0,
-			FileGroups:     0,
-			OutputDir:      outputDir,
-			WasDryRun:      req.DryRun,
+		return &processingResult{
+			allBlocks:   allBlocks,
+			fileCount:   fileCount,
+			sourceFiles: sourceFiles,
 		}, nil
 	}
 
 	// ブロックのグループ化
-	// 依存性注入されたsplitterを使用するか、設定ファイル付きのデフォルトを作成
-	var groups []*types.BlockGroup
-	parsedFile := &types.ParsedFile{Blocks: allBlocks}
-	if uc.splitter != nil {
-		groups = uc.splitter.GroupBlocks(parsedFile)
-	} else {
-		s := splitter.NewWithConfig(cfg)
-		groups = s.GroupBlocks(parsedFile)
-	}
-
+	groups := uc.groupBlocks(allBlocks, prep.cfg)
 	fmt.Printf("Organized into %d file groups\n", len(groups))
 
-	// ファイルの書き出し
-	// 依存性注入されたwriterを使用するか、デフォルトを作成
+	// 削除対象ファイルの特定
+	filesToRemove := uc.getFilesToRemove(sourceFiles, groups, prep.cfg)
+
+	return &processingResult{
+		allBlocks:     allBlocks,
+		fileCount:     fileCount,
+		sourceFiles:   sourceFiles,
+		groups:        groups,
+		filesToRemove: filesToRemove,
+	}, nil
+}
+
+// groupBlocks groups blocks using either injected splitter or default with config
+func (uc *OrganizeFilesUsecase) groupBlocks(allBlocks []*types.Block, cfg *config.Config) []*types.BlockGroup {
+	parsedFile := &types.ParsedFile{Blocks: allBlocks}
+	if uc.splitter != nil {
+		return uc.splitter.GroupBlocks(parsedFile)
+	}
+	s := splitter.NewWithConfig(cfg)
+	return s.GroupBlocks(parsedFile)
+}
+
+// handleOutput writes the grouped blocks to files
+func (uc *OrganizeFilesUsecase) handleOutput(req *OrganizeFilesRequest, prep *preparationResult, proc *processingResult) error {
 	if uc.writer != nil {
-		if err := uc.writer.WriteGroups(groups); err != nil {
-			return nil, fmt.Errorf("failed to write files: %w", err)
+		if err := uc.writer.WriteGroups(proc.groups); err != nil {
+			return fmt.Errorf("failed to write files: %w", err)
 		}
 	} else {
-		w := writer.New(outputDir, req.DryRun)
-		if err := w.WriteGroups(groups); err != nil {
-			return nil, fmt.Errorf("failed to write files: %w", err)
+		w := writer.New(prep.outputDir, req.DryRun)
+		if err := w.WriteGroups(proc.groups); err != nil {
+			return fmt.Errorf("failed to write files: %w", err)
 		}
 	}
+	return nil
+}
 
-	// バックアップとソースファイルの処理
-	// 入力と出力が同じディレクトリの場合のみ処理（冪等性確保のため）
+// handleSourceFileCleanup manages backup and removal of source files
+func (uc *OrganizeFilesUsecase) handleSourceFileCleanup(req *OrganizeFilesRequest, prep *preparationResult, proc *processingResult) error {
+	// 入力と出力が同じディレクトリかチェック
 	inputDir := req.InputPath
-	if !stat.IsDir() {
+	if !prep.stat.IsDir() {
 		inputDir = filepath.Dir(req.InputPath)
 	}
-	sameDirectory := (outputDir == inputDir)
-	shouldProcessSourceFiles := !req.DryRun && len(sourceFiles) > 0 && sameDirectory
+	sameDirectory := (prep.outputDir == inputDir)
+
+	// ソースファイル処理が必要かチェック
+	shouldProcessSourceFiles := !req.DryRun && len(proc.filesToRemove) > 0 && sameDirectory
 
 	if shouldProcessSourceFiles {
 		if req.Backup {
-			// バックアップディレクトリにファイルを移動
-			if err := uc.backupSourceFiles(sourceFiles, outputDir); err != nil {
-				return nil, fmt.Errorf("failed to backup source files: %w", err)
+			if err := uc.backupSourceFiles(proc.filesToRemove, prep.outputDir); err != nil {
+				return fmt.Errorf("failed to backup source files: %w", err)
 			}
 		} else {
-			// デフォルトでソースファイルを削除（冪等性のため）
-			if err := uc.removeSourceFiles(sourceFiles); err != nil {
-				return nil, fmt.Errorf("failed to remove source files: %w", err)
+			if err := uc.removeSourceFiles(proc.filesToRemove); err != nil {
+				return fmt.Errorf("failed to remove source files: %w", err)
 			}
 		}
 	}
 
-	// 結果の表示
+	return nil
+}
+
+// displayResults shows the execution results to the user
+func (uc *OrganizeFilesUsecase) displayResults(req *OrganizeFilesRequest, prep *preparationResult, proc *processingResult) {
+	// 入力と出力が同じディレクトリかチェック
+	inputDir := req.InputPath
+	if !prep.stat.IsDir() {
+		inputDir = filepath.Dir(req.InputPath)
+	}
+	sameDirectory := (prep.outputDir == inputDir)
+	shouldProcessSourceFiles := !req.DryRun && len(proc.filesToRemove) > 0 && sameDirectory
+
 	if req.DryRun {
-		if sameDirectory {
+		if sameDirectory && len(proc.filesToRemove) > 0 {
 			if req.Backup {
-				fmt.Println("Dry run completed. Use --dry-run=false to actually create files and backup source files.")
+				fmt.Println("Plan completed. Use 'run --backup' to actually create files and backup source files.")
 			} else {
-				fmt.Println("Dry run completed. Use --dry-run=false to actually create files and remove source files.")
+				fmt.Println("Plan completed. Use 'run' to actually create files and remove source files.")
 			}
 		} else {
-			fmt.Println("Dry run completed. Use --dry-run=false to actually create files.")
+			fmt.Println("Plan completed. Use 'run' to actually create files.")
 		}
 	} else {
 		if shouldProcessSourceFiles {
 			if req.Backup {
-				fmt.Printf("Successfully organized Terraform files into: %s (backed up %d source files)\n", outputDir, len(sourceFiles))
+				fmt.Printf("Successfully organized Terraform files into: %s (backed up %d source files)\n", prep.outputDir, len(proc.filesToRemove))
 			} else {
-				fmt.Printf("Successfully organized Terraform files into: %s (removed %d source files)\n", outputDir, len(sourceFiles))
+				fmt.Printf("Successfully organized Terraform files into: %s (removed %d source files)\n", prep.outputDir, len(proc.filesToRemove))
 			}
 		} else {
-			fmt.Printf("Successfully organized Terraform files into: %s\n", outputDir)
+			fmt.Printf("Successfully organized Terraform files into: %s\n", prep.outputDir)
 		}
 	}
-
-	return &OrganizeFilesResponse{
-		ProcessedFiles: fileCount,
-		TotalBlocks:    len(allBlocks),
-		FileGroups:     len(groups),
-		OutputDir:      outputDir,
-		WasDryRun:      req.DryRun,
-	}, nil
 }
 
 // parseInput は入力パス（ファイルまたはディレクトリ）を解析
@@ -283,7 +380,7 @@ func (uc *OrganizeFilesUsecase) parseDirectoryRecursive(dirPath string) (blocks 
 			return nil
 		}
 
-		if !info.IsDir() && strings.HasSuffix(path, ".tf") && !uc.isGeneratedFile(filepath.Base(path), filepath.Dir(path)) {
+		if !info.IsDir() && strings.HasSuffix(path, ".tf") {
 			fileBlocks, parseErr := uc.processFile(path)
 			if parseErr != nil {
 				return nil // ファイルエラーは警告のみで継続
@@ -312,8 +409,8 @@ func (uc *OrganizeFilesUsecase) parseDirectoryNonRecursive(dirPath string) (bloc
 			continue
 		}
 
-		// .tfファイルのみ処理（生成済みファイルはスキップ）
-		if !strings.HasSuffix(entry.Name(), ".tf") || uc.isGeneratedFile(entry.Name(), dirPath) {
+		// .tfファイルのみ処理
+		if !strings.HasSuffix(entry.Name(), ".tf") {
 			continue
 		}
 
@@ -419,60 +516,46 @@ func (uc *OrganizeFilesUsecase) removeSourceFiles(sourceFiles []string) error {
 	return nil
 }
 
-// isGeneratedFile は生成済みファイルかどうかを判定
-func (uc *OrganizeFilesUsecase) isGeneratedFile(filename, dirPath string) bool {
-	// terraform-file-organizeで生成されるファイル名パターンをチェック
-	generatedPrefixes := []string{
-		"data__",
-		"resource__",
-		"module__",
+// getFilesToRemove は削除すべきソースファイルを特定
+func (uc *OrganizeFilesUsecase) getFilesToRemove(sourceFiles []string, groups []*types.BlockGroup, _ *config.Config) []string {
+	// 生成される予定のファイル名を収集
+	generatedFiles := make(map[string]bool)
+	for _, group := range groups {
+		generatedFiles[group.FileName] = true
 	}
 
-	// プレフィックスマッチングによる判定（常に生成済み扱い）
-	for _, prefix := range generatedPrefixes {
-		if strings.HasPrefix(filename, prefix) {
-			return true
-		}
-	}
+	var filesToRemove []string
+	for _, sourceFile := range sourceFiles {
+		fileName := filepath.Base(sourceFile)
 
-	// 標準ファイル名（locals.tf, variables.tf等）は、ディレクトリに生成済みファイルが複数存在する場合のみ判定
-	standardNames := []string{
-		"locals.tf",
-		"outputs.tf",
-		"providers.tf",
-		"terraform.tf",
-		"variables.tf",
-	}
-
-	if slices.Contains(standardNames, filename) {
-		// ディレクトリ内に他の生成済みファイルが存在するかチェック
-		return uc.hasOtherGeneratedFiles(dirPath, filename)
-	}
-
-	return false
-}
-
-// hasOtherGeneratedFiles は指定したファイル以外に生成済みファイルが存在するかチェック
-func (uc *OrganizeFilesUsecase) hasOtherGeneratedFiles(dirPath, excludeFile string) bool {
-	entries, err := os.ReadDir(dirPath)
-	if err != nil {
-		return false
-	}
-
-	generatedCount := 0
-	for _, entry := range entries {
-		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".tf") || entry.Name() == excludeFile {
+		// 生成済みファイルパターンは削除対象から除外（ツールが生成したファイル）
+		if strings.HasPrefix(fileName, "data__") ||
+			strings.HasPrefix(fileName, "resource__") ||
+			strings.HasPrefix(fileName, "module__") {
 			continue
 		}
 
-		// data__, resource__, module__ プレフィックスのファイルが存在するかチェック
-		if strings.HasPrefix(entry.Name(), "data__") ||
-			strings.HasPrefix(entry.Name(), "resource__") ||
-			strings.HasPrefix(entry.Name(), "module__") {
-			generatedCount++
+		// 新しく生成されるファイルは削除対象から除外（冪等性のため）
+		// 既に生成されたファイルを削除してしまうと、次回実行時にファイルが無くなってしまう
+		if generatedFiles[fileName] {
+			continue
 		}
+
+		// デフォルト生成ファイルかチェック
+		isDefaultGenerated := fileName == localsFile ||
+			fileName == outputsFile ||
+			fileName == providersFile ||
+			fileName == terraformFile ||
+			fileName == variablesFile
+
+		if isDefaultGenerated {
+			// デフォルト生成ファイルは削除対象から除外（これらも生成される可能性がある）
+			continue
+		}
+
+		// それ以外のファイル（main.tf等のユーザー作成ファイル）のみを削除対象とする
+		filesToRemove = append(filesToRemove, sourceFile)
 	}
 
-	// 生成済みファイルが2個以上存在する場合、分割済みディレクトリと判定
-	return generatedCount >= 2
+	return filesToRemove
 }
