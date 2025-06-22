@@ -1,4 +1,8 @@
-# case2: デフォルト設定でのテスト（case1と同じ設定）
-groups: []
+# case2: aws_instanceをcompute.tfにグループ化するテスト
+groups:
+  - name: "compute"
+    filename: "compute.tf"
+    patterns:
+      - "aws_instance"
 overrides: {}
 exclude: []
