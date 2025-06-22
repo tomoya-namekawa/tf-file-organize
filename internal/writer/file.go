@@ -414,6 +414,21 @@ func (w *Writer) buildTemplateTokens(valueExpr *hclsyntax.TemplateExpr) hclwrite
 				Type:  hclsyntax.TokenTemplateSeqEnd,
 				Bytes: []byte("}"),
 			})
+		default:
+			// 未知のパートタイプの場合はスキップするのではなく、placeholderを出力
+			tokens = append(tokens,
+				&hclwrite.Token{
+					Type:  hclsyntax.TokenTemplateInterp,
+					Bytes: []byte("${"),
+				},
+				&hclwrite.Token{
+					Type:  hclsyntax.TokenIdent,
+					Bytes: []byte("unknown"),
+				},
+				&hclwrite.Token{
+					Type:  hclsyntax.TokenTemplateSeqEnd,
+					Bytes: []byte("}"),
+				})
 		}
 	}
 	tokens = append(tokens, &hclwrite.Token{Type: hclsyntax.TokenCQuote, Bytes: []byte(`"`)})
