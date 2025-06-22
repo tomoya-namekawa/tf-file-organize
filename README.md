@@ -11,11 +11,7 @@ Splits large Terraform files into manageable smaller files organized by resource
 ### Using go install
 
 ```bash
-# Install latest version
 go install github.com/tomoya-namekawa/tf-file-organize@latest
-
-# Install specific version
-go install github.com/tomoya-namekawa/tf-file-organize@v1.0.0
 ```
 
 ### Download Binary
@@ -36,19 +32,19 @@ go build -o tf-file-organize
 
 ```bash
 # Preview mode (no actual file creation)
-tf-file-organize plan main.tf
+tf-file-organize plan .
 
 # Actually organize files (source files are removed)
-tf-file-organize run main.tf
+tf-file-organize run .
 
 # Organize with backup (source files moved to backup directory)
-tf-file-organize run main.tf --backup
+tf-file-organize run . --backup
 
 # Organize entire directory
 tf-file-organize run ./terraform-configs
 
 # Specify custom output directory
-tf-file-organize run main.tf --output-dir ./organized
+tf-file-organize run . --output-dir ./organized
 
 # Use config file for custom grouping
 tf-file-organize run . --config tf-file-organize.yaml
@@ -61,8 +57,8 @@ tf-file-organize validate-config tf-file-organize.yaml
 
 | Command | Description | Example |
 |---------|-------------|---------|
-| `run` | Actually organize and create files | `tf-file-organize run main.tf` |
-| `plan` | Preview mode (dry-run) | `tf-file-organize plan main.tf` |
+| `run` | Actually organize and create files | `tf-file-organize run .` |
+| `plan` | Preview mode (dry-run) | `tf-file-organize plan .` |
 | `validate-config` | Validate configuration file | `tf-file-organize validate-config config.yaml` |
 | `version` | Show version information | `tf-file-organize version` |
 
@@ -160,10 +156,10 @@ exclude_files:
 
 ```bash
 # Step 1: Preview what will happen (safe to run)
-tf-file-organize plan main.tf
+tf-file-organize plan .
 
 # Step 2: Actually organize the files
-tf-file-organize run main.tf
+tf-file-organize run .
 ```
 
 ### Before and After
@@ -231,30 +227,6 @@ data "aws_ami" "ubuntu" {
   most_recent = true
 }
 ```
-
-### Common Use Cases
-
-```bash
-# Safe preview before making changes
-tf-file-organize plan ./terraform-files
-
-# Organize with backup (recommended for first time)
-tf-file-organize run ./terraform-files --backup
-
-# Organize entire project directory
-tf-file-organize run .
-
-# Use custom configuration
-tf-file-organize run . --config my-config.yaml
-```
-
-## Idempotency and File Management
-
-This tool ensures idempotent operations and provides consistent results across multiple runs:
-
-- **Default Behavior**: Source files are automatically removed after organization (to prevent duplication)
-- **Backup Option**: `--backup` flag saves original files to backup directory
-- **Smart Conflict Resolution**: Configuration-aware duplicate file detection and removal
 
 ## Development & Contributing
 
