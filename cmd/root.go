@@ -18,6 +18,7 @@ var (
 	configFile string
 	dryRun     bool
 	recursive  bool
+	backup     bool
 )
 
 var rootCmd = &cobra.Command{
@@ -46,6 +47,7 @@ func Execute() error {
 	rootCmd.Flags().StringVarP(&configFile, "config", "c", "", "Configuration file for custom grouping rules")
 	rootCmd.Flags().BoolVarP(&dryRun, "dry-run", "d", false, "Show what would be done without actually creating files")
 	rootCmd.Flags().BoolVarP(&recursive, "recursive", "r", false, "Process directories recursively")
+	rootCmd.Flags().BoolVar(&backup, "backup", false, "Backup original files to 'backup' subdirectory before organizing")
 
 	// Enable version flag
 	rootCmd.SetVersionTemplate("{{.Version}}\n")
@@ -205,6 +207,7 @@ func run() error {
 		ConfigFile: configFile,
 		DryRun:     dryRun,
 		Recursive:  recursive,
+		Backup:     backup,
 	}
 
 	// Execute usecase

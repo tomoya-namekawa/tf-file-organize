@@ -79,8 +79,7 @@ func (w *Writer) writeGroup(group *types.BlockGroup) error {
 			}
 
 			// LeadingCommentsを行ごとに分割してトークンとして追加
-			lines := strings.Split(block.LeadingComments, "\n")
-			for _, line := range lines {
+			for line := range strings.SplitSeq(block.LeadingComments, "\n") {
 				if line != "" {
 					rootBody.AppendUnstructuredTokens(hclwrite.Tokens{
 						{Type: hclsyntax.TokenComment, Bytes: []byte(line)},

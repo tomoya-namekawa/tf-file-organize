@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"github.com/tomoya-namekawa/terraform-file-organize/internal/config"
@@ -40,6 +41,7 @@ type OrganizeFilesRequest struct {
 	ConfigFile string
 	DryRun     bool
 	Recursive  bool
+	Backup     bool
 }
 
 // OrganizeFilesResponse は OrganizeFiles ユースケースのレスポンス
@@ -108,6 +110,8 @@ func (d *DefaultConfigLoader) LoadConfig(configPath string) (*config.Config, err
 }
 
 // Execute performs the main business logic for organizing Terraform files.
+//
+//nolint:gocyclo // Complex business logic with multiple validation steps
 func (uc *OrganizeFilesUsecase) Execute(req *OrganizeFilesRequest) (*OrganizeFilesResponse, error) {
 	// 入力パスの情報を取得
 	stat, err := os.Stat(req.InputPath)
@@ -132,7 +136,7 @@ func (uc *OrganizeFilesUsecase) Execute(req *OrganizeFilesRequest) (*OrganizeFil
 	}
 
 	// ファイルの解析
-	allBlocks, fileCount, err := uc.parseInput(req.InputPath, stat, req.Recursive)
+	allBlocks, fileCount, sourceFiles, err := uc.parseInput(req.InputPath, stat, req.Recursive)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse input: %w", err)
 	}
@@ -174,11 +178,50 @@ func (uc *OrganizeFilesUsecase) Execute(req *OrganizeFilesRequest) (*OrganizeFil
 		}
 	}
 
+	// バックアップとソースファイルの処理
+	// 入力と出力が同じディレクトリの場合のみ処理（冪等性確保のため）
+	inputDir := req.InputPath
+	if !stat.IsDir() {
+		inputDir = filepath.Dir(req.InputPath)
+	}
+	sameDirectory := (outputDir == inputDir)
+	shouldProcessSourceFiles := !req.DryRun && len(sourceFiles) > 0 && sameDirectory
+
+	if shouldProcessSourceFiles {
+		if req.Backup {
+			// バックアップディレクトリにファイルを移動
+			if err := uc.backupSourceFiles(sourceFiles, outputDir); err != nil {
+				return nil, fmt.Errorf("failed to backup source files: %w", err)
+			}
+		} else {
+			// デフォルトでソースファイルを削除（冪等性のため）
+			if err := uc.removeSourceFiles(sourceFiles); err != nil {
+				return nil, fmt.Errorf("failed to remove source files: %w", err)
+			}
+		}
+	}
+
 	// 結果の表示
 	if req.DryRun {
-		fmt.Println("Dry run completed. Use --dry-run=false to actually create files.")
+		if sameDirectory {
+			if req.Backup {
+				fmt.Println("Dry run completed. Use --dry-run=false to actually create files and backup source files.")
+			} else {
+				fmt.Println("Dry run completed. Use --dry-run=false to actually create files and remove source files.")
+			}
+		} else {
+			fmt.Println("Dry run completed. Use --dry-run=false to actually create files.")
+		}
 	} else {
-		fmt.Printf("Successfully organized Terraform files into: %s\n", outputDir)
+		if shouldProcessSourceFiles {
+			if req.Backup {
+				fmt.Printf("Successfully organized Terraform files into: %s (backed up %d source files)\n", outputDir, len(sourceFiles))
+			} else {
+				fmt.Printf("Successfully organized Terraform files into: %s (removed %d source files)\n", outputDir, len(sourceFiles))
+			}
+		} else {
+			fmt.Printf("Successfully organized Terraform files into: %s\n", outputDir)
+		}
 	}
 
 	return &OrganizeFilesResponse{
@@ -191,39 +234,36 @@ func (uc *OrganizeFilesUsecase) Execute(req *OrganizeFilesRequest) (*OrganizeFil
 }
 
 // parseInput は入力パス（ファイルまたはディレクトリ）を解析
-func (uc *OrganizeFilesUsecase) parseInput(inputPath string, stat os.FileInfo, recursive bool) ([]*types.Block, int, error) {
-	var allBlocks []*types.Block
-	var fileCount int
-
+func (uc *OrganizeFilesUsecase) parseInput(inputPath string, stat os.FileInfo, recursive bool) (blocks []*types.Block, fileCount int, sourceFiles []string, err error) {
 	if stat.IsDir() {
 		if recursive {
 			fmt.Printf("Scanning directory recursively for Terraform files: %s\n", inputPath)
 		} else {
 			fmt.Printf("Scanning directory for Terraform files: %s\n", inputPath)
 		}
-		blocks, count, err := uc.parseDirectory(inputPath, recursive)
+		blocks, fileCount, sourceFiles, err = uc.parseDirectory(inputPath, recursive)
 		if err != nil {
-			return nil, 0, err
+			return
 		}
-		allBlocks = blocks
-		fileCount = count
-		fmt.Printf("Found %d .tf files with %d total blocks\n", fileCount, len(allBlocks))
+		fmt.Printf("Found %d .tf files with %d total blocks\n", fileCount, len(blocks))
 	} else {
 		fmt.Printf("Parsing Terraform file: %s\n", inputPath)
-		parsedFile, err := uc.parser.ParseFile(inputPath)
-		if err != nil {
-			return nil, 0, err
+		parsedFile, parseErr := uc.parser.ParseFile(inputPath)
+		if parseErr != nil {
+			err = parseErr
+			return
 		}
-		allBlocks = parsedFile.Blocks
+		blocks = parsedFile.Blocks
 		fileCount = 1
-		fmt.Printf("Found %d blocks\n", len(allBlocks))
+		sourceFiles = []string{inputPath}
+		fmt.Printf("Found %d blocks\n", len(blocks))
 	}
 
-	return allBlocks, fileCount, nil
+	return blocks, fileCount, sourceFiles, nil
 }
 
 // parseDirectory はディレクトリ内の.tfファイルを解析（再帰可能）
-func (uc *OrganizeFilesUsecase) parseDirectory(dirPath string, recursive bool) ([]*types.Block, int, error) {
+func (uc *OrganizeFilesUsecase) parseDirectory(dirPath string, recursive bool) (blocks []*types.Block, fileCount int, sourceFiles []string, err error) {
 	if recursive {
 		return uc.parseDirectoryRecursive(dirPath)
 	}
@@ -231,13 +271,10 @@ func (uc *OrganizeFilesUsecase) parseDirectory(dirPath string, recursive bool) (
 }
 
 // parseDirectoryRecursive はディレクトリを再帰的に解析
-func (uc *OrganizeFilesUsecase) parseDirectoryRecursive(dirPath string) ([]*types.Block, int, error) {
-	var allBlocks []*types.Block
-	fileCount := 0
-
-	err := filepath.Walk(dirPath, func(path string, info os.FileInfo, err error) error {
-		if err != nil {
-			return err
+func (uc *OrganizeFilesUsecase) parseDirectoryRecursive(dirPath string) (blocks []*types.Block, fileCount int, sourceFiles []string, err error) {
+	err = filepath.Walk(dirPath, func(path string, info os.FileInfo, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
 		}
 
 		// シンボリックリンクをスキップ（セキュリティ上の理由）
@@ -246,29 +283,27 @@ func (uc *OrganizeFilesUsecase) parseDirectoryRecursive(dirPath string) ([]*type
 			return nil
 		}
 
-		if !info.IsDir() && strings.HasSuffix(path, ".tf") {
-			blocks, parseErr := uc.processFile(path)
+		if !info.IsDir() && strings.HasSuffix(path, ".tf") && !uc.isGeneratedFile(filepath.Base(path), filepath.Dir(path)) {
+			fileBlocks, parseErr := uc.processFile(path)
 			if parseErr != nil {
 				return nil // ファイルエラーは警告のみで継続
 			}
-			allBlocks = append(allBlocks, blocks...)
+			blocks = append(blocks, fileBlocks...)
+			sourceFiles = append(sourceFiles, path)
 			fileCount++
 		}
 
 		return nil
 	})
 
-	return allBlocks, fileCount, err
+	return blocks, fileCount, sourceFiles, err
 }
 
 // parseDirectoryNonRecursive は指定されたディレクトリのみを解析
-func (uc *OrganizeFilesUsecase) parseDirectoryNonRecursive(dirPath string) ([]*types.Block, int, error) {
-	var allBlocks []*types.Block
-	fileCount := 0
-
+func (uc *OrganizeFilesUsecase) parseDirectoryNonRecursive(dirPath string) (blocks []*types.Block, fileCount int, sourceFiles []string, err error) {
 	entries, err := os.ReadDir(dirPath)
 	if err != nil {
-		return nil, 0, fmt.Errorf("failed to read directory: %w", err)
+		return nil, 0, nil, fmt.Errorf("failed to read directory: %w", err)
 	}
 
 	for _, entry := range entries {
@@ -277,28 +312,29 @@ func (uc *OrganizeFilesUsecase) parseDirectoryNonRecursive(dirPath string) ([]*t
 			continue
 		}
 
-		// .tfファイルのみ処理
-		if !strings.HasSuffix(entry.Name(), ".tf") {
+		// .tfファイルのみ処理（生成済みファイルはスキップ）
+		if !strings.HasSuffix(entry.Name(), ".tf") || uc.isGeneratedFile(entry.Name(), dirPath) {
 			continue
 		}
 
 		path := filepath.Join(dirPath, entry.Name())
 
 		// シンボリックリンクをスキップ（セキュリティ上の理由）
-		if info, err := entry.Info(); err == nil && info.Mode()&os.ModeSymlink != 0 {
+		if info, infoErr := entry.Info(); infoErr == nil && info.Mode()&os.ModeSymlink != 0 {
 			fmt.Printf("Warning: skipping symbolic link: %s\n", path)
 			continue
 		}
 
-		blocks, parseErr := uc.processFile(path)
+		fileBlocks, parseErr := uc.processFile(path)
 		if parseErr != nil {
 			continue // ファイルエラーは警告のみで継続
 		}
-		allBlocks = append(allBlocks, blocks...)
+		blocks = append(blocks, fileBlocks...)
+		sourceFiles = append(sourceFiles, path)
 		fileCount++
 	}
 
-	return allBlocks, fileCount, nil
+	return blocks, fileCount, sourceFiles, nil
 }
 
 // processFile は単一ファイルを処理
@@ -348,4 +384,95 @@ func (uc *OrganizeFilesUsecase) validatePath(path string) error {
 	}
 
 	return nil
+}
+
+// backupSourceFiles はソースファイルをbackupディレクトリに移動
+func (uc *OrganizeFilesUsecase) backupSourceFiles(sourceFiles []string, outputDir string) error {
+	backupDir := filepath.Join(outputDir, "backup")
+	if err := os.MkdirAll(backupDir, 0750); err != nil {
+		return fmt.Errorf("failed to create backup directory: %w", err)
+	}
+
+	for _, sourceFile := range sourceFiles {
+		fileName := filepath.Base(sourceFile)
+		backupPath := filepath.Join(backupDir, fileName)
+
+		// ファイルが既に存在する場合は上書き
+		if err := os.Rename(sourceFile, backupPath); err != nil {
+			return fmt.Errorf("failed to backup file %s: %w", sourceFile, err)
+		}
+		fmt.Printf("  Backed up: %s -> %s\n", sourceFile, backupPath)
+	}
+
+	return nil
+}
+
+// removeSourceFiles はソースファイルを削除
+func (uc *OrganizeFilesUsecase) removeSourceFiles(sourceFiles []string) error {
+	for _, sourceFile := range sourceFiles {
+		if err := os.Remove(sourceFile); err != nil {
+			return fmt.Errorf("failed to remove file %s: %w", sourceFile, err)
+		}
+		fmt.Printf("  Removed: %s\n", sourceFile)
+	}
+
+	return nil
+}
+
+// isGeneratedFile は生成済みファイルかどうかを判定
+func (uc *OrganizeFilesUsecase) isGeneratedFile(filename, dirPath string) bool {
+	// terraform-file-organizeで生成されるファイル名パターンをチェック
+	generatedPrefixes := []string{
+		"data__",
+		"resource__",
+		"module__",
+	}
+
+	// プレフィックスマッチングによる判定（常に生成済み扱い）
+	for _, prefix := range generatedPrefixes {
+		if strings.HasPrefix(filename, prefix) {
+			return true
+		}
+	}
+
+	// 標準ファイル名（locals.tf, variables.tf等）は、ディレクトリに生成済みファイルが複数存在する場合のみ判定
+	standardNames := []string{
+		"locals.tf",
+		"outputs.tf",
+		"providers.tf",
+		"terraform.tf",
+		"variables.tf",
+	}
+
+	if slices.Contains(standardNames, filename) {
+		// ディレクトリ内に他の生成済みファイルが存在するかチェック
+		return uc.hasOtherGeneratedFiles(dirPath, filename)
+	}
+
+	return false
+}
+
+// hasOtherGeneratedFiles は指定したファイル以外に生成済みファイルが存在するかチェック
+func (uc *OrganizeFilesUsecase) hasOtherGeneratedFiles(dirPath, excludeFile string) bool {
+	entries, err := os.ReadDir(dirPath)
+	if err != nil {
+		return false
+	}
+
+	generatedCount := 0
+	for _, entry := range entries {
+		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".tf") || entry.Name() == excludeFile {
+			continue
+		}
+
+		// data__, resource__, module__ プレフィックスのファイルが存在するかチェック
+		if strings.HasPrefix(entry.Name(), "data__") ||
+			strings.HasPrefix(entry.Name(), "resource__") ||
+			strings.HasPrefix(entry.Name(), "module__") {
+			generatedCount++
+		}
+	}
+
+	// 生成済みファイルが2個以上存在する場合、分割済みディレクトリと判定
+	return generatedCount >= 2
 }
