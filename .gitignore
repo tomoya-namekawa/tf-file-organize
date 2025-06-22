@@ -54,14 +54,6 @@ terraform-file-organize-test
 *.p12
 *.pfx
 secrets/
-config/local.yaml
-config/production.yaml
-
-# IDEファイル
-.vscode/
-.idea/
-*.swp
-*.swo
 
 # OS生成ファイル
 .DS_Store

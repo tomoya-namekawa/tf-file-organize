@@ -51,10 +51,6 @@ golangci-lint run
 # GitHub Actions linting
 actionlint
 
-# Security scanning
-go install github.com/securecodewarrior/gosec/cmd/gosec@latest
-gosec ./...
-
 # Run tests with coverage
 go test -v -race -coverprofile=coverage.out ./...
 go tool cover -func=coverage.out
@@ -180,9 +176,8 @@ All tools are managed via mise for consistent environments across development an
 - **workflow-lint**: Lints GitHub Actions workflows using actionlint
 - **pinact-check**: Verifies all GitHub Actions are pinned to commit hashes for security
 - **test**: Runs comprehensive test suite with race detection and coverage reporting
-- **lint**: Executes golangci-lint with multiple linters enabled
+- **lint**: Executes golangci-lint with multiple linters enabled (includes gosec)
 - **build**: Builds binary and verifies it works with sample inputs
-- **security**: Runs gosec security scanner for vulnerability detection
 
 **Linting Configuration** (`.golangci.yml`):
 - Comprehensive linter configuration with security-focused rules
