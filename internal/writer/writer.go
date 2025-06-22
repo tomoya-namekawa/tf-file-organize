@@ -24,26 +24,15 @@ var emptyBlockSchema = &hcl.BodySchema{
 
 // Writer handles writing grouped blocks to output files.
 type Writer struct {
-	outputDir   string // 出力ディレクトリ
-	dryRun      bool   // ドライランモード
-	addComments bool   // コメント追加を有効にするかどうか
+	outputDir string // 出力ディレクトリ
+	dryRun    bool   // ドライランモード
 }
 
 // New creates a new Writer with default settings.
 func New(outputDir string, dryRun bool) *Writer {
 	return &Writer{
-		outputDir:   outputDir,
-		dryRun:      dryRun,
-		addComments: false, // デフォルトでは無効
-	}
-}
-
-// NewWithComments creates a new Writer with comment addition enabled.
-func NewWithComments(outputDir string, dryRun, addComments bool) *Writer {
-	return &Writer{
-		outputDir:   outputDir,
-		dryRun:      dryRun,
-		addComments: addComments,
+		outputDir: outputDir,
+		dryRun:    dryRun,
 	}
 }
 
@@ -108,16 +97,6 @@ func (w *Writer) writeGroup(group *types.BlockGroup) error {
 			rootBody.AppendNewline()
 		}
 
-		// ブロック前にコメントを追加（有効な場合のみ）
-		if w.addComments {
-			if comment := w.getBlockComment(block); comment != "" {
-				rootBody.AppendUnstructuredTokens(hclwrite.Tokens{
-					{Type: hclsyntax.TokenComment, Bytes: []byte(comment)},
-					{Type: hclsyntax.TokenNewline, Bytes: []byte("\n")},
-				})
-			}
-		}
-
 		// 生のソースコードが利用可能な場合はそれを使用
 		if block.RawBody != "" {
 			w.appendRawBlock(rootBody, block)
@@ -140,82 +119,6 @@ func (w *Writer) writeGroup(group *types.BlockGroup) error {
 
 	fmt.Printf("Created file: %s\n", filePath)
 	return nil
-}
-
-// getBlockComment はブロックに適切なコメントを返す
-func (w *Writer) getBlockComment(block *types.Block) string {
-	return w.getDefaultComment(block)
-}
-
-// commentGenerator はコメント生成のヘルパー構造体
-type commentGenerator struct{}
-
-// getDefaultComment はブロックタイプに基づくデフォルトコメントを生成
-func (w *Writer) getDefaultComment(block *types.Block) string {
-	generator := commentGenerator{}
-
-	switch block.Type {
-	case "terraform":
-		return "# Terraform configuration"
-	case "provider":
-		return generator.getProviderComment(block.Labels)
-	case "variable":
-		return generator.getLabeledComment("Variable", block.Labels)
-	case "locals":
-		return "# Local values"
-	case "output":
-		return generator.getLabeledComment("Output", block.Labels)
-	case "data":
-		return generator.getDataComment(block.Labels)
-	case "resource":
-		return generator.getResourceComment(block.Labels)
-	case "module":
-		return generator.getLabeledComment("Module", block.Labels)
-	}
-
-	return ""
-}
-
-// getProviderComment はプロバイダー用のコメントを生成
-func (c commentGenerator) getProviderComment(labels []string) string {
-	if len(labels) == 0 {
-		return "# Provider configuration"
-	}
-
-	switch labels[0] {
-	case "aws":
-		return "# AWS Provider configuration"
-	case "google":
-		return "# Google Cloud Provider configuration"
-	case "azurerm":
-		return "# Azure Provider configuration"
-	default:
-		return fmt.Sprintf("# %s Provider configuration", labels[0])
-	}
-}
-
-// getLabeledComment はラベル付きブロック用のコメントを生成
-func (c commentGenerator) getLabeledComment(blockType string, labels []string) string {
-	if len(labels) > 0 {
-		return fmt.Sprintf("# %s: %s", blockType, labels[0])
-	}
-	return fmt.Sprintf("# %s definition", blockType)
-}
-
-// getDataComment はデータソース用のコメントを生成
-func (c commentGenerator) getDataComment(labels []string) string {
-	if len(labels) >= 2 {
-		return fmt.Sprintf("# Data source: %s", labels[1])
-	}
-	return "# Data source"
-}
-
-// getResourceComment はリソース用のコメントを生成
-func (c commentGenerator) getResourceComment(labels []string) string {
-	if len(labels) >= 2 {
-		return fmt.Sprintf("# Resource: %s", labels[1])
-	}
-	return "# Resource definition"
 }
 
 func (w *Writer) copyBlockBody(sourceBody hcl.Body, targetBody *hclwrite.Body) error {

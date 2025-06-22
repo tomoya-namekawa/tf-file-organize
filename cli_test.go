@@ -149,13 +149,13 @@ func TestCLIDirectoryInput(t *testing.T) {
 	}
 
 	// 複数のTerraformファイルを作成
-	file1Content := `
+	const (
+		file1Content = `
 variable "region" {
   type = string
 }
 `
-
-	file2Content := `
+		file2Content = `
 resource "aws_instance" "web1" {
   ami = "ami-12345"
 }
@@ -164,6 +164,7 @@ resource "aws_instance" "web2" {
   ami = "ami-67890"
 }
 `
+	)
 
 	err = os.WriteFile(filepath.Join(inputDir, "variables.tf"), []byte(file1Content), 0644)
 	if err != nil {
@@ -175,7 +176,7 @@ resource "aws_instance" "web2" {
 		t.Fatalf("Failed to create instances.tf: %v", err)
 	}
 
-	// ディレクトリ入力でCLIを実行
+	// ディレクトリ入力でCLIを実行（非再帰的）
 	cmd = exec.Command(binary, inputDir, "--output-dir", outputDir)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
@@ -200,6 +201,87 @@ resource "aws_instance" "web2" {
 
 	if web1Count != 1 || web2Count != 1 {
 		t.Errorf("Expected both web1 and web2 resources in output, got web1:%d web2:%d", web1Count, web2Count)
+	}
+}
+
+func TestCLIRecursiveDirectoryInput(t *testing.T) {
+	// テスト用ディレクトリを作成
+	testDir := createTestDir(t, "recursive")
+
+	binary := filepath.Join(testDir, "terraform-file-organize")
+	cmd := exec.Command("go", "build", "-o", binary)
+	err := cmd.Run()
+	if err != nil {
+		t.Fatalf("Failed to build binary: %v", err)
+	}
+
+	inputDir := filepath.Join(testDir, "terraform")
+	subDir := filepath.Join(inputDir, "modules", "compute")
+
+	// ディレクトリ構造を作成
+	err = os.MkdirAll(subDir, 0755)
+	if err != nil {
+		t.Fatalf("Failed to create subdirectory: %v", err)
+	}
+
+	// ルートディレクトリのファイル
+	const rootFileContent = `
+variable "region" {
+  type = string
+}
+`
+
+	// サブディレクトリのファイル
+	subFileContent := `
+resource "aws_instance" "sub_web" {
+  ami = "ami-sub123"
+}
+`
+
+	err = os.WriteFile(filepath.Join(inputDir, "variables.tf"), []byte(rootFileContent), 0644)
+	if err != nil {
+		t.Fatalf("Failed to create root variables.tf: %v", err)
+	}
+
+	err = os.WriteFile(filepath.Join(subDir, "instances.tf"), []byte(subFileContent), 0644)
+	if err != nil {
+		t.Fatalf("Failed to create sub instances.tf: %v", err)
+	}
+
+	// 再帰的フラグなしでCLIを実行（inputDirに直接出力）
+	cmd = exec.Command(binary, inputDir, "--dry-run")
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("CLI execution failed: %v\nOutput: %s", err, output)
+	}
+
+	// サブディレクトリのファイルは処理されないはず（dry-runなので出力メッセージで確認）
+	outputStr := string(output)
+	if strings.Contains(outputStr, "sub_web") {
+		t.Errorf("Sub-directory files should not be processed without recursive flag")
+	}
+
+	// variables.tfは処理されるはず
+	if !strings.Contains(outputStr, "variables.tf") {
+		t.Errorf("Variables file should be processed in root directory")
+	}
+
+	// 再帰的フラグありでCLIを実行
+	cmd = exec.Command(binary, inputDir, "--recursive", "--dry-run")
+	output, err = cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("CLI execution failed with recursive flag: %v\nOutput: %s", err, output)
+	}
+
+	// 今度はサブディレクトリのファイルも処理されるはず
+	outputStr = string(output)
+	if !strings.Contains(outputStr, "resource__aws_instance.tf") {
+		t.Errorf("Resource file should be created with recursive flag")
+	}
+
+	// サブディレクトリのファイルが処理されることを確認（Processedメッセージで確認）
+	if !strings.Contains(outputStr, "modules/compute/instances.tf") {
+		t.Errorf("Sub-directory file should be processed with recursive flag")
 	}
 }
 
@@ -406,5 +488,52 @@ func TestCLIErrorHandling(t *testing.T) {
 
 	if !strings.Contains(string(output), "failed to load config") {
 		t.Errorf("Expected config error message, got: %s", output)
+	}
+}
+
+func TestCLIIncompatibleFlags(t *testing.T) {
+	// テスト用ディレクトリを作成
+	testDir := createTestDir(t, "incompatible")
+
+	binary := filepath.Join(testDir, "terraform-file-organize")
+	cmd := exec.Command("go", "build", "-o", binary)
+	err := cmd.Run()
+	if err != nil {
+		t.Fatalf("Failed to build binary: %v", err)
+	}
+
+	inputDir := filepath.Join(testDir, "terraform")
+	outputDir := filepath.Join(testDir, "output")
+
+	// テスト用ディレクトリとファイルを作成
+	err = os.MkdirAll(inputDir, 0755)
+	if err != nil {
+		t.Fatalf("Failed to create input directory: %v", err)
+	}
+
+	tfContent := `
+variable "test" {
+  type = string
+}
+`
+	err = os.WriteFile(filepath.Join(inputDir, "test.tf"), []byte(tfContent), 0644)
+	if err != nil {
+		t.Fatalf("Failed to create test file: %v", err)
+	}
+
+	// -o と -r を同時に指定してエラーになることを確認
+	cmd = exec.Command(binary, inputDir, "--output-dir", outputDir, "--recursive")
+	output, err := cmd.CombinedOutput()
+	if err == nil {
+		t.Errorf("Expected error when using -o and -r together, got none")
+	}
+
+	outputStr := string(output)
+	if !strings.Contains(outputStr, "cannot use --output-dir") {
+		t.Errorf("Expected incompatible flags error message, got: %s", outputStr)
+	}
+
+	if !strings.Contains(outputStr, "combining multiple directories") {
+		t.Errorf("Expected explanation about combining directories, got: %s", outputStr)
 	}
 }

@@ -13,11 +13,11 @@ import (
 )
 
 var (
-	inputFile   string
-	outputDir   string
-	configFile  string
-	dryRun      bool
-	addComments bool
+	inputFile  string
+	outputDir  string
+	configFile string
+	dryRun     bool
+	recursive  bool
 )
 
 var rootCmd = &cobra.Command{
@@ -27,7 +27,8 @@ var rootCmd = &cobra.Command{
 	Long: `A CLI tool to split Terraform files into separate files organized by resource type.
 Each resource type will be placed in its own file following naming conventions.
 
-Input can be either a single .tf file or a directory containing .tf files.`,
+Input can be either a single .tf file or a directory containing .tf files.
+By default, only files in the specified directory are processed. Use -r for recursive processing.`,
 	Args: cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 		inputFile = args[0]
@@ -44,7 +45,7 @@ func Execute() error {
 	rootCmd.Flags().StringVarP(&outputDir, "output-dir", "o", "", "Output directory for split files (default: same as input path)")
 	rootCmd.Flags().StringVarP(&configFile, "config", "c", "", "Configuration file for custom grouping rules")
 	rootCmd.Flags().BoolVarP(&dryRun, "dry-run", "d", false, "Show what would be done without actually creating files")
-	rootCmd.Flags().BoolVar(&addComments, "add-comments", false, "Add descriptive comments to terraform blocks")
+	rootCmd.Flags().BoolVarP(&recursive, "recursive", "r", false, "Process directories recursively")
 
 	// Enable version flag
 	rootCmd.SetVersionTemplate("{{.Version}}\n")
@@ -167,6 +168,17 @@ func validateConfigPath(path string) error {
 	return nil
 }
 
+// validateFlagCombinations validates incompatible flag combinations
+func validateFlagCombinations() error {
+	// Prevent using -o (output-dir) and -r (recursive) together
+	// because combining multiple directories into one output is unnatural
+	if outputDir != "" && recursive {
+		return fmt.Errorf("cannot use --output-dir (-o) with --recursive (-r): combining multiple directories into one output is not supported")
+	}
+
+	return nil
+}
+
 func run() error {
 	// Validate all inputs first
 	if err := validateInputPath(inputFile); err != nil {
@@ -181,13 +193,18 @@ func run() error {
 		return err
 	}
 
+	// Validate flag combinations
+	if err := validateFlagCombinations(); err != nil {
+		return err
+	}
+
 	// Create usecase request
 	req := &usecase.OrganizeFilesRequest{
-		InputPath:   inputFile,
-		OutputDir:   outputDir,
-		ConfigFile:  configFile,
-		DryRun:      dryRun,
-		AddComments: addComments,
+		InputPath:  inputFile,
+		OutputDir:  outputDir,
+		ConfigFile: configFile,
+		DryRun:     dryRun,
+		Recursive:  recursive,
 	}
 
 	// Execute usecase

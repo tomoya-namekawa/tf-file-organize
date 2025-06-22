@@ -35,11 +35,11 @@ type ConfigLoaderInterface interface {
 
 // OrganizeFilesRequest は OrganizeFiles ユースケースのリクエスト
 type OrganizeFilesRequest struct {
-	InputPath   string
-	OutputDir   string
-	ConfigFile  string
-	DryRun      bool
-	AddComments bool
+	InputPath  string
+	OutputDir  string
+	ConfigFile string
+	DryRun     bool
+	Recursive  bool
 }
 
 // OrganizeFilesResponse は OrganizeFiles ユースケースのレスポンス
@@ -132,7 +132,7 @@ func (uc *OrganizeFilesUsecase) Execute(req *OrganizeFilesRequest) (*OrganizeFil
 	}
 
 	// ファイルの解析
-	allBlocks, fileCount, err := uc.parseInput(req.InputPath, stat)
+	allBlocks, fileCount, err := uc.parseInput(req.InputPath, stat, req.Recursive)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse input: %w", err)
 	}
@@ -168,7 +168,7 @@ func (uc *OrganizeFilesUsecase) Execute(req *OrganizeFilesRequest) (*OrganizeFil
 			return nil, fmt.Errorf("failed to write files: %w", err)
 		}
 	} else {
-		w := writer.NewWithComments(outputDir, req.DryRun, req.AddComments)
+		w := writer.New(outputDir, req.DryRun)
 		if err := w.WriteGroups(groups); err != nil {
 			return nil, fmt.Errorf("failed to write files: %w", err)
 		}
@@ -191,13 +191,17 @@ func (uc *OrganizeFilesUsecase) Execute(req *OrganizeFilesRequest) (*OrganizeFil
 }
 
 // parseInput は入力パス（ファイルまたはディレクトリ）を解析
-func (uc *OrganizeFilesUsecase) parseInput(inputPath string, stat os.FileInfo) ([]*types.Block, int, error) {
+func (uc *OrganizeFilesUsecase) parseInput(inputPath string, stat os.FileInfo, recursive bool) ([]*types.Block, int, error) {
 	var allBlocks []*types.Block
 	var fileCount int
 
 	if stat.IsDir() {
-		fmt.Printf("Scanning directory for Terraform files: %s\n", inputPath)
-		blocks, count, err := uc.parseDirectory(inputPath)
+		if recursive {
+			fmt.Printf("Scanning directory recursively for Terraform files: %s\n", inputPath)
+		} else {
+			fmt.Printf("Scanning directory for Terraform files: %s\n", inputPath)
+		}
+		blocks, count, err := uc.parseDirectory(inputPath, recursive)
 		if err != nil {
 			return nil, 0, err
 		}
@@ -218,8 +222,16 @@ func (uc *OrganizeFilesUsecase) parseInput(inputPath string, stat os.FileInfo) (
 	return allBlocks, fileCount, nil
 }
 
-// parseDirectory はディレクトリ内の.tfファイルを再帰的に解析
-func (uc *OrganizeFilesUsecase) parseDirectory(dirPath string) ([]*types.Block, int, error) {
+// parseDirectory はディレクトリ内の.tfファイルを解析（再帰可能）
+func (uc *OrganizeFilesUsecase) parseDirectory(dirPath string, recursive bool) ([]*types.Block, int, error) {
+	if recursive {
+		return uc.parseDirectoryRecursive(dirPath)
+	}
+	return uc.parseDirectoryNonRecursive(dirPath)
+}
+
+// parseDirectoryRecursive はディレクトリを再帰的に解析
+func (uc *OrganizeFilesUsecase) parseDirectoryRecursive(dirPath string) ([]*types.Block, int, error) {
 	var allBlocks []*types.Block
 	fileCount := 0
 
@@ -235,27 +247,76 @@ func (uc *OrganizeFilesUsecase) parseDirectory(dirPath string) ([]*types.Block, 
 		}
 
 		if !info.IsDir() && strings.HasSuffix(path, ".tf") {
-			// パスの安全性を確認
-			if err := uc.validatePath(path); err != nil {
-				fmt.Printf("Warning: skipping unsafe path %s: %v\n", path, err)
-				return nil
-			}
-
-			parsedFile, parseErr := uc.parser.ParseFile(path)
+			blocks, parseErr := uc.processFile(path)
 			if parseErr != nil {
-				fmt.Printf("Warning: failed to parse %s: %v\n", path, parseErr)
-				return nil
+				return nil // ファイルエラーは警告のみで継続
 			}
-
-			allBlocks = append(allBlocks, parsedFile.Blocks...)
+			allBlocks = append(allBlocks, blocks...)
 			fileCount++
-			fmt.Printf("  Processed: %s (%d blocks)\n", path, len(parsedFile.Blocks))
 		}
 
 		return nil
 	})
 
 	return allBlocks, fileCount, err
+}
+
+// parseDirectoryNonRecursive は指定されたディレクトリのみを解析
+func (uc *OrganizeFilesUsecase) parseDirectoryNonRecursive(dirPath string) ([]*types.Block, int, error) {
+	var allBlocks []*types.Block
+	fileCount := 0
+
+	entries, err := os.ReadDir(dirPath)
+	if err != nil {
+		return nil, 0, fmt.Errorf("failed to read directory: %w", err)
+	}
+
+	for _, entry := range entries {
+		// ディレクトリはスキップ
+		if entry.IsDir() {
+			continue
+		}
+
+		// .tfファイルのみ処理
+		if !strings.HasSuffix(entry.Name(), ".tf") {
+			continue
+		}
+
+		path := filepath.Join(dirPath, entry.Name())
+
+		// シンボリックリンクをスキップ（セキュリティ上の理由）
+		if info, err := entry.Info(); err == nil && info.Mode()&os.ModeSymlink != 0 {
+			fmt.Printf("Warning: skipping symbolic link: %s\n", path)
+			continue
+		}
+
+		blocks, parseErr := uc.processFile(path)
+		if parseErr != nil {
+			continue // ファイルエラーは警告のみで継続
+		}
+		allBlocks = append(allBlocks, blocks...)
+		fileCount++
+	}
+
+	return allBlocks, fileCount, nil
+}
+
+// processFile は単一ファイルを処理
+func (uc *OrganizeFilesUsecase) processFile(path string) ([]*types.Block, error) {
+	// パスの安全性を確認
+	if err := uc.validatePath(path); err != nil {
+		fmt.Printf("Warning: skipping unsafe path %s: %v\n", path, err)
+		return nil, err
+	}
+
+	parsedFile, parseErr := uc.parser.ParseFile(path)
+	if parseErr != nil {
+		fmt.Printf("Warning: failed to parse %s: %v\n", path, parseErr)
+		return nil, parseErr
+	}
+
+	fmt.Printf("  Processed: %s (%d blocks)\n", path, len(parsedFile.Blocks))
+	return parsedFile.Blocks, nil
 }
 
 // validatePath はパスの安全性を検証（パストラバーサル攻撃を防ぐ）
