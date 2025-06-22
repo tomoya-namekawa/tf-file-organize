@@ -7,6 +7,26 @@ on:
     branches: [ main ]
 
 jobs:
+  workflow-lint:
+    name: Workflow Lint
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Check out code
+      uses: actions/checkout@692973e3d937129bcbf40652eb9f2f61becf3332 # v4.1.7
+      
+    - name: Install mise
+      uses: jdx/mise-action@v2
+      with:
+        install: true
+        cache: true
+        
+    - name: Run actionlint
+      run: actionlint
+      
+    - name: Run zizmor
+      run: zizmor --format=json .github/workflows/
+
   pinact-check:
     name: Check Action Hash Pinning
     runs-on: ubuntu-latest

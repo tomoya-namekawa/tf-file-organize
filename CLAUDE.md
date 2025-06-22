@@ -48,6 +48,10 @@ go test -run TestGoldenFiles -v
 # Linting (managed via mise)
 golangci-lint run
 
+# GitHub Actions linting
+actionlint
+zizmor --format=json .github/workflows/
+
 # Run tests with coverage
 go test -v -race -coverprofile=coverage.out ./...
 go tool cover -func=coverage.out
@@ -170,6 +174,7 @@ The project uses GitHub Actions for continuous integration with comprehensive te
 
 **CI Pipeline** (`.github/workflows/ci.yml`):
 All tools are managed via mise for consistent environments across development and CI:
+- **workflow-lint**: Lints GitHub Actions workflows using actionlint and zizmor
 - **pinact-check**: Verifies all GitHub Actions are pinned to commit hashes for security
 - **test**: Runs comprehensive test suite with race detection and coverage reporting
 - **lint**: Executes golangci-lint with multiple linters enabled

@@ -7,6 +7,10 @@ golangci-lint = "latest"
 gosec = "latest"
 pinact = "latest"
 
+# GitHub Actions linting tools
+actionlint = "latest"
+zizmor = "latest"
+
 [env]
 # Go environment variables
 GOPROXY = "https://proxy.golang.org,direct"
