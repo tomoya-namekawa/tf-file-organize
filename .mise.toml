@@ -7,7 +7,7 @@ pinact = "latest"
 
 # GitHub Actions linting tools
 actionlint = "latest"
-golangci-lint = "v2.1.6"
+golangci-lint = "2.4.0"
 "npm:@goreleaser/goreleaser" = "latest"
 terraform = "latest"
 
