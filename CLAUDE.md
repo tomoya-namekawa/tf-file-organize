@@ -27,8 +27,8 @@ go build -o tf-file-organize
 # Basic usage examples
 ./tf-file-organize plan main.tf
 ./tf-file-organize run . --output-dir tmp/test
-./tf-file-organize run testdata/terraform --config testdata/configs/tf-file-organize.yaml
-./tf-file-organize validate-config testdata/configs/tf-file-organize.yaml
+./tf-file-organize run testdata/terraform --config testdata/configs/terraform-file-organize.yaml
+./tf-file-organize validate-config testdata/configs/terraform-file-organize.yaml
 ```
 
 ### Essential Development Commands
@@ -110,6 +110,8 @@ Auto-searches for configuration files in this order:
 2. `tf-file-organize.yml`
 3. `.tf-file-organize.yaml`
 4. `.tf-file-organize.yml`
+5. `terraform-file-organize.yaml`
+6. `terraform-file-organize.yml`
 
 **Configuration features:**
 - **Groups**: Custom file grouping with complex pattern matching:
@@ -122,6 +124,8 @@ Auto-searches for configuration files in this order:
 
 ### Test Structure
 - **Unit Tests**: All `internal/` packages have `*_test.go` files using separate test packages (e.g., `main_test`) for isolation
+- **Business Logic Tests** (`internal/usecase/business_test.go`): Business logic testing with mock implementations
+- **Mock Helpers** (`internal/usecase/mocks_test.go`): Mock implementations and test utilities for usecase testing
 - **CLI Tests** (`cli_test.go`): Command-line interface functionality testing via binary execution
 - **Golden File Tests** (`golden_test.go`): **Critical** - End-to-end testing comparing actual output against expected files
 - **Idempotency Tests** (`idempotency_test.go`): Ensures consistent results across multiple runs
@@ -225,8 +229,13 @@ When modifying output behavior, golden files must be updated manually:
 # Run tests to see differences
 go test -run TestGoldenFiles -v
 
-# Update golden files with new expected output
-cp tmp/integration-test/case*/* testdata/integration/case*/expected/
+# Update golden files with new expected output (after verifying changes are correct)
+for case in testdata/integration/case*/; do
+  cp -r tmp/integration-test/$(basename "$case")/* "$case/expected/"
+done
+
+# Alternative: Update specific case
+cp -r tmp/integration-test/case1/* testdata/integration/case1/expected/
 ```
 
 ## Development Workflow
