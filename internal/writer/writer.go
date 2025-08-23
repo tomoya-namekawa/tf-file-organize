@@ -3,12 +3,12 @@
 package writer
 
 import (
-	"bytes"
 	"fmt"
 	"os"
 	"path/filepath"
 	"sort"
 	"strings"
+	"unicode"
 
 	"github.com/hashicorp/hcl/v2"
 	"github.com/hashicorp/hcl/v2/hclsyntax"
@@ -102,12 +102,38 @@ func (w *Writer) writeGroup(group *types.BlockGroup) error {
 	}
 
 	content := file.Bytes()
-
 	formattedContent := hclwrite.Format(content)
 
 	// Check if file already exists with same content (for idempotency)
 	if existingContent, err := os.ReadFile(filepath.Clean(filePath)); err == nil {
-		if bytes.Equal(existingContent, formattedContent) {
+		// Normalize whitespace and newlines for comparison
+		normalizeContent := func(content []byte) string {
+			// Remove trailing whitespace from each line and normalize line endings
+			lines := strings.Split(string(content), "\n")
+			var normalized []string
+			for _, line := range lines {
+				normalized = append(normalized, strings.TrimRightFunc(line, unicode.IsSpace))
+			}
+			
+			// Remove excessive blank lines (more than 2 consecutive empty lines become 2)
+			result := []string{}
+			emptyCount := 0
+			for _, line := range normalized {
+				if line == "" {
+					emptyCount++
+					if emptyCount <= 2 {
+						result = append(result, line)
+					}
+				} else {
+					emptyCount = 0
+					result = append(result, line)
+				}
+			}
+			
+			return strings.Join(result, "\n")
+		}
+		
+		if normalizeContent(existingContent) == normalizeContent(formattedContent) {
 			// File already exists with same content, skip writing
 			return nil
 		}
