@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.5.2](https://github.com/tomoya-namekawa/tf-file-organize/compare/v0.5.1...v0.5.2) (2025-08-23)
+
+
+### Bug Fixes
+
+* **deps:** update module github.com/hashicorp/hcl/v2 to v2.24.0 ([#29](https://github.com/tomoya-namekawa/tf-file-organize/issues/29)) ([96ba3d0](https://github.com/tomoya-namekawa/tf-file-organize/commit/96ba3d0ceb38eafb069602545c8c9750223213cc))
+* **deps:** update module github.com/zclconf/go-cty to v1.16.4 ([#37](https://github.com/tomoya-namekawa/tf-file-organize/issues/37)) ([c3b4f8b](https://github.com/tomoya-namekawa/tf-file-organize/commit/c3b4f8b387ea23538a103af3dee9e1549eb11c5a))
+* resolve false "Created file" messages in idempotent runs ([#40](https://github.com/tomoya-namekawa/tf-file-organize/issues/40)) ([390844b](https://github.com/tomoya-namekawa/tf-file-organize/commit/390844b4887cb19ccb5ee79015514a526bd7d027))
+
 ## [0.5.1](https://github.com/tomoya-namekawa/tf-file-organize/compare/v0.5.0...v0.5.1) (2025-06-22)
 
 
