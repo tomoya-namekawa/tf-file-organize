@@ -107,6 +107,16 @@ output "instance_id" {
 		t.Errorf("File contents differ between runs")
 		logContentDifferences(t, contents1, contents2, contents3)
 	}
+
+	// Check that second and third runs don't show "Created file" messages
+	// (indicating proper idempotency)
+	if strings.Contains(string(output2), "Created file:") {
+		t.Errorf("Second run shows 'Created file' messages, indicating lack of idempotency:\n%s", output2)
+	}
+
+	if strings.Contains(string(output3), "Created file:") {
+		t.Errorf("Third run shows 'Created file' messages, indicating lack of idempotency:\n%s", output3)
+	}
 }
 
 func TestIdempotencyWithConfig(t *testing.T) {
@@ -175,6 +185,7 @@ exclude_files:
 
 	var allFiles [][]string
 	var allContents []map[string]string
+	var allOutputs [][]byte
 
 	for i := range 3 {
 		cmd = exec.Command(binary, "run", testDir, "--config", configFile)
@@ -195,6 +206,7 @@ exclude_files:
 
 		allFiles = append(allFiles, files)
 		allContents = append(allContents, contents)
+		allOutputs = append(allOutputs, output)
 	}
 
 	for i := 1; i < len(allFiles); i++ {
@@ -207,6 +219,146 @@ exclude_files:
 		if !compareFileContents(allContents[0], allContents[i]) {
 			t.Errorf("File contents differ between run 1 and run %d", i+1)
 			logContentDifferences(t, allContents[0], allContents[i], nil)
+		}
+
+		// Check that subsequent runs don't show "Created file" messages
+		if strings.Contains(string(allOutputs[i]), "Created file:") {
+			t.Errorf("Run %d shows 'Created file' messages, indicating lack of idempotency:\n%s", i+1, allOutputs[i])
+		}
+	}
+}
+
+// TestIdempotencyWithComplexContent tests idempotency with files that contain
+// comments, excessive whitespace, and complex formatting that might trigger
+// the "Created file" message issue
+func TestIdempotencyWithComplexContent(t *testing.T) {
+	testDir := createTestDir(t, "idempotency-complex")
+
+	binary := filepath.Join(testDir, "tf-file-organize")
+	cmd := exec.Command("go", "build", "-o", binary)
+	err := cmd.Run()
+	if err != nil {
+		t.Fatalf("Failed to build binary: %v", err)
+	}
+
+	// Create a file with complex content similar to the reported issue
+	inputFile := filepath.Join(testDir, "main.tf")
+	const complexContent = `resource "google_cloud_run_domain_mapping" "domain" {
+  location = var.region
+  name     = "${var.subdomain}.${var.domain_name}"
+
+  metadata {
+    namespace = var.project_id
+  }
+
+  spec {
+    route_name = google_cloud_run_service.hooks.name
+  }
+}
+
+
+
+
+
+
+# yeah
+
+resource "google_cloud_run_service" "hooks" {
+  name     = "hooks"
+  location = var.region
+
+  template {
+    spec {
+      containers {
+        image = "gcr.io/${var.project_id}/hooks:${var.build_number}"
+      }
+    }
+  }
+}
+
+resource "google_cloud_run_service_iam_policy" "noauth" {
+  location    = google_cloud_run_service.hooks.location
+  service     = google_cloud_run_service.hooks.name
+  project     = var.project_id
+  policy_data = data.google_iam_policy.noauth.policy_data
+}
+
+variable "project_id" {
+  description = "The GCP project ID"
+  type        = string
+}
+`
+
+	err = os.WriteFile(inputFile, []byte(complexContent), 0644)
+	if err != nil {
+		t.Fatalf("Failed to create test file: %v", err)
+	}
+
+	// Create a config file to group google_cloud_run resources
+	configFile := filepath.Join(testDir, "tf-file-organize.yaml")
+	configContent := `
+groups:
+  - name: "google_cloud_run"
+    filename: "google_cloud_run.tf"
+    patterns:
+      - "resource.google_cloud_run_*"
+`
+
+	err = os.WriteFile(configFile, []byte(configContent), 0644)
+	if err != nil {
+		t.Fatalf("Failed to create config file: %v", err)
+	}
+
+	var outputs [][]byte
+
+	// Run the command 5 times to ensure complete idempotency
+	for i := 0; i < 5; i++ {
+		cmd = exec.Command(binary, "run", testDir, "--config", configFile)
+		output, err := cmd.CombinedOutput()
+		if err != nil {
+			t.Fatalf("Execution %d failed: %v\nOutput: %s", i+1, err, output)
+		}
+		outputs = append(outputs, output)
+
+		// Log the output for debugging
+		t.Logf("Run %d output: %s", i+1, string(output))
+	}
+
+	// Check that only the first run shows "Created file" messages
+	for i := 1; i < len(outputs); i++ {
+		if strings.Contains(string(outputs[i]), "Created file:") {
+			t.Errorf("Run %d shows 'Created file' messages, indicating lack of idempotency:\n%s", i+1, outputs[i])
+		}
+	}
+
+	// Verify that the google_cloud_run.tf file was created and is stable
+	targetFile := filepath.Join(testDir, "google_cloud_run.tf")
+	if _, err := os.Stat(targetFile); os.IsNotExist(err) {
+		t.Fatalf("Expected file google_cloud_run.tf was not created")
+	}
+
+	// Read file content after each run to ensure it's identical
+	var contents []string
+	for range 3 {
+		cmd = exec.Command(binary, "run", testDir, "--config", configFile)
+		_, err := cmd.CombinedOutput()
+		if err != nil {
+			t.Fatalf("Failed to run command: %v", err)
+		}
+
+		content, err := os.ReadFile(targetFile)
+		if err != nil {
+			t.Fatalf("Failed to read file: %v", err)
+		}
+		contents = append(contents, string(content))
+	}
+
+	// All contents should be identical
+	for i := 1; i < len(contents); i++ {
+		if contents[0] != contents[i] {
+			t.Errorf("File content differs between runs")
+			t.Logf("First run content length: %d", len(contents[0]))
+			t.Logf("Run %d content length: %d", i+1, len(contents[i]))
 		}
 	}
 }
