@@ -44,7 +44,7 @@ jobs:
           go-version-file: 'go.mod'
 
       - name: Install mise
-        uses: jdx/mise-action@13abe502c30c1559a5c37dff303831bab82c9402 # v2.2.3
+        uses: jdx/mise-action@5ac50f778e26fac95da98d50503682459e86d566 # v3.2.0
         with:
           install: true
 
