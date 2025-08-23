@@ -1,15 +1,15 @@
 [tools]
 # Go toolchain
-go = "latest"
+go = "1.25.0"
 
 # Development tools (CI uses dedicated actions)
-pinact = "latest"
+pinact = "3.4.2"
 
 # GitHub Actions linting tools
-actionlint = "latest"
+actionlint = "1.7.7"
 golangci-lint = "v2.4.0"
-"npm:@goreleaser/goreleaser" = "latest"
-terraform = "latest"
+"npm:@goreleaser/goreleaser" = "2.11.2"
+terraform = "1.13.0"
 
 [env]
 # Go environment variables
