@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.5.3](https://github.com/tomoya-namekawa/tf-file-organize/compare/v0.5.2...v0.5.3) (2025-12-12)
+
+
+### Bug Fixes
+
+* **deps:** update module github.com/spf13/cobra to v1.10.2 ([#44](https://github.com/tomoya-namekawa/tf-file-organize/issues/44)) ([eb6bfe0](https://github.com/tomoya-namekawa/tf-file-organize/commit/eb6bfe02b112b17e24b744d9261f74964e427f70))
+* **deps:** update module github.com/zclconf/go-cty to v1.17.0 ([#49](https://github.com/tomoya-namekawa/tf-file-organize/issues/49)) ([7a7477f](https://github.com/tomoya-namekawa/tf-file-organize/commit/7a7477fc9061fe6461befa301784d15fb239b362))
+
 ## [0.5.2](https://github.com/tomoya-namekawa/tf-file-organize/compare/v0.5.1...v0.5.2) (2025-08-23)
 
 
