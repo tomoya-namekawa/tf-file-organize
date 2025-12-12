@@ -6,7 +6,7 @@ go = "1.25.0"
 pinact = "3.4.2"
 
 # GitHub Actions linting tools
-actionlint = "1.7.7"
+actionlint = "1.7.9"
 golangci-lint = "v2.4.0"
 "npm:@goreleaser/goreleaser" = "2.13.1"
 terraform = "1.13.0"
