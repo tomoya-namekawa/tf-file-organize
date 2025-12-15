@@ -1,6 +1,6 @@
 [tools]
 # Go toolchain
-go = "1.25.0"
+go = "1.25.5"
 
 # Development tools (CI uses dedicated actions)
 pinact = "3.4.2"
