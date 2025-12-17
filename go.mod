@@ -3,7 +3,7 @@ module github.com/tomoya-namekawa/tf-file-organize
 go 1.24.4
 
 require (
-	github.com/goccy/go-yaml v1.18.0
+	github.com/goccy/go-yaml v1.19.1
 	github.com/hashicorp/hcl/v2 v2.24.0
 	github.com/spf13/cobra v1.10.2
 	github.com/zclconf/go-cty v1.17.0
